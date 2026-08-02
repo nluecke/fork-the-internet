@@ -1,0 +1,119 @@
+{
+  "type": "entities.lookup",
+  "metadata": {
+    "requestTime": "2026-08-02T16:29:29+00:00",
+    "responseTime": "2026-08-02T16:29:29+00:00"
+  },
+  "requestParameters": {
+    "relatedTo": null,
+    "search": null,
+    "limit": null,
+    "page": null,
+    "entityType": null,
+    "entityCode": null
+  },
+  "error": null,
+  "perf": null,
+  "data": [
+    {
+      "code": "AF",
+      "name": "Africa",
+      "type": "continent",
+      "subnames": [],
+      "attrs": {
+        "fqid": "geo.netacuity.AF"
+      }
+    },
+    {
+      "code": "AN",
+      "name": "Antarctica",
+      "type": "continent",
+      "subnames": [],
+      "attrs": {
+        "fqid": "geo.netacuity.AN"
+      }
+    },
+    {
+      "code": "AS",
+      "name": "Asia",
+      "type": "continent",
+      "subnames": [],
+      "attrs": {
+        "fqid": "geo.netacuity.AS"
+      }
+    },
+    {
+      "code": "EU",
+      "name": "Europe",
+      "type": "continent",
+      "subnames": [],
+      "attrs": {
+        "fqid": "geo.netacuity.EU"
+      }
+    },
+    {
+      "code": "NA",
+      "name": "North America",
+      "type": "continent",
+      "subnames": [],
+      "attrs": {
+        "fqid": "geo.netacuity.NA"
+      }
+    },
+    {
+      "code": "OC",
+      "name": "Oceania",
+      "type": "continent",
+      "subnames": [],
+      "attrs": {
+        "fqid": "geo.netacuity.OC"
+      }
+    },
+    {
+      "code": "SA",
+      "name": "South America",
+      "type": "continent",
+      "subnames": [],
+      "attrs": {
+        "fqid": "geo.netacuity.SA"
+      }
+    },
+    {
+      "code": "DE",
+      "name": "Germany",
+      "type": "country",
+      "subnames": [],
+      "attrs": {
+        "fqid": "geo.netacuity.EU.DE"
+      }
+    },
+    {
+      "code": "SN",
+      "name": "Senegal",
+      "type": "country",
+      "subnames": [],
+      "attrs": {
+        "fqid": "geo.netacuity.AF.SN"
+      }
+    },
+    {
+      "code": "TO",
+      "name": "Tonga",
+      "type": "country",
+      "subnames": [],
+      "attrs": {
+        "fqid": "geo.netacuity.OC.TO"
+      }
+    },
+    {
+      "code": "US",
+      "name": "United States",
+      "type": "country",
+      "subnames": [],
+      "attrs": {
+        "fqid": "geo.netacuity.NA.US"
+      }
+    }
+  ],
+  "copyright": "This data is Copyright (c) 2021-2025 Georgia Tech Research Corporation. All Rights Reserved."
+}
