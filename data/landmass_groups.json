@@ -1,0 +1,35 @@
+{
+  "schema_note": "Kuratierte Liste ALLER Abweichungen vom 2000-km-Schwellwert-Clustering (siehe docs/decisions/003-graph-schema.md, Punkt 1). Zwei Kategorien: force_same_landmass (Cluster werden trotz > 2000km Abstand zusammengefasst, weil sie auf derselben Landmasse liegen) und accepted_separate (mehrere Hubs sind bewusst akzeptiert, weil es echte getrennte Landmassen sind). Jedes Land, dessen rohes Clustering mehr als einen Cluster ergibt, MUSS in genau einer der beiden Listen stehen -- sonst schlaegt der Build fehl (siehe build_landmass_groups() in scripts/build_graph.py). Das ist die Absicherung gegen 'Land X zerfaellt kuenftig, aber niemand hat es bemerkt'.",
+  "cluster_threshold_km": 2000,
+  "force_same_landmass": [
+    {
+      "country": "United States",
+      "anchor_points": ["anchorage-ak-united-states", "shirley-ny-united-states"],
+      "note": "Festland inkl. Alaska/Westkueste + Ostkueste sind eine zusammenhaengende Landmasse; der 2000-km-Schwellwert trennt sie nur wegen duenner Kabelabdeckung dazwischen. Hawaii bleibt bewusst separat (echter Ozean dazwischen)."
+    },
+    {
+      "country": "Canada",
+      "anchor_points": ["cordova-bay-bc-canada", "cape-ray-nl-canada"],
+      "note": "Westkueste/British Columbia + Atlantikprovinzen sind eine zusammenhaengende Landmasse."
+    },
+    {
+      "country": "Australia",
+      "anchor_points": ["sydney-nsw-australia", "darwin-nt-australia"],
+      "note": "Ostkueste + Nordwesten sind eine zusammenhaengende Landmasse."
+    }
+  ],
+  "accepted_separate": [
+    {
+      "country": "United States",
+      "note": "Nach dem force_same_landmass-Merge oben bleibt Hawaii ein zweiter, bewusst getrennter Hub -- echter Ozean, keine Landmasse."
+    },
+    {
+      "country": "Netherlands",
+      "note": "Festland + Bonaire (Karibik) -- echte getrennte Landmassen."
+    },
+    {
+      "country": "Kiribati",
+      "note": "Tarawa + Tabwakea/Kiritimati -- echte getrennte Landmassen, gegenueberliegende Seiten des 180.-Meridians."
+    }
+  ]
+}

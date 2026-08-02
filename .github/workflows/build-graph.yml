@@ -1,0 +1,46 @@
+name: Build topology graph
+
+on:
+  schedule:
+    # Weekly, Monday 03:00 UTC -- topology is slow, no need for more often
+    # (docs/decisions/003-graph-schema.md; CLAUDE.md "Kein Backend -- aber ein Build-Schritt")
+    - cron: "0 3 * * 1"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-graph
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build graph.json
+        run: python3 scripts/build_graph.py
+
+      - name: Report artifact size
+        run: |
+          SIZE_KB=$(du -k data/graph.json | cut -f1)
+          echo "graph.json: ${SIZE_KB} KB"
+          echo "graph_size_kb=${SIZE_KB}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "nluecke"
+          git config user.email "niklasfluecke@gmail.com"
+          if git diff --quiet -- data/graph.json; then
+            echo "no changes to data/graph.json, nothing to commit"
+            exit 0
+          fi
+          git add data/graph.json
+          git commit -m "Weekly topology rebuild ($(date -u +%Y-%m-%d))"
+          git push
