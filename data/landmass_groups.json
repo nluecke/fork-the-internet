@@ -1,35 +1,35 @@
 {
-  "schema_note": "Kuratierte Liste ALLER Abweichungen vom 2000-km-Schwellwert-Clustering (siehe docs/decisions/003-graph-schema.md, Punkt 1). Zwei Kategorien: force_same_landmass (Cluster werden trotz > 2000km Abstand zusammengefasst, weil sie auf derselben Landmasse liegen) und accepted_separate (mehrere Hubs sind bewusst akzeptiert, weil es echte getrennte Landmassen sind). Jedes Land, dessen rohes Clustering mehr als einen Cluster ergibt, MUSS in genau einer der beiden Listen stehen -- sonst schlaegt der Build fehl (siehe build_landmass_groups() in scripts/build_graph.py). Das ist die Absicherung gegen 'Land X zerfaellt kuenftig, aber niemand hat es bemerkt'.",
+  "schema_note": "Curated list of ALL deviations from the 2000-km threshold clustering (see docs/decisions/003-graph-schema.md, Point 1). Two categories: force_same_landmass (clusters are merged despite being > 2000km apart, because they sit on the same landmass) and accepted_separate (multiple hubs are deliberately accepted, because they are genuinely separate landmasses). Every country whose raw clustering yields more than one cluster MUST appear in exactly one of the two lists -- otherwise the build fails (see build_landmass_groups() in scripts/build_graph.py). This is the safeguard against 'country X splits apart in the future, but nobody noticed'.",
   "cluster_threshold_km": 2000,
   "force_same_landmass": [
     {
       "country": "United States",
       "anchor_points": ["anchorage-ak-united-states", "shirley-ny-united-states"],
-      "note": "Festland inkl. Alaska/Westkueste + Ostkueste sind eine zusammenhaengende Landmasse; der 2000-km-Schwellwert trennt sie nur wegen duenner Kabelabdeckung dazwischen. Hawaii bleibt bewusst separat (echter Ozean dazwischen)."
+      "note": "The mainland incl. Alaska/west coast + east coast is one contiguous landmass; the 2000-km threshold only splits them because of sparse cable coverage in between. Hawaii stays deliberately separate (real ocean in between)."
     },
     {
       "country": "Canada",
       "anchor_points": ["cordova-bay-bc-canada", "cape-ray-nl-canada"],
-      "note": "Westkueste/British Columbia + Atlantikprovinzen sind eine zusammenhaengende Landmasse."
+      "note": "West coast/British Columbia + Atlantic provinces are one contiguous landmass."
     },
     {
       "country": "Australia",
       "anchor_points": ["sydney-nsw-australia", "darwin-nt-australia"],
-      "note": "Ostkueste + Nordwesten sind eine zusammenhaengende Landmasse."
+      "note": "East coast + northwest are one contiguous landmass."
     }
   ],
   "accepted_separate": [
     {
       "country": "United States",
-      "note": "Nach dem force_same_landmass-Merge oben bleibt Hawaii ein zweiter, bewusst getrennter Hub -- echter Ozean, keine Landmasse."
+      "note": "After the force_same_landmass merge above, Hawaii remains a second, deliberately separate hub -- real ocean, not a landmass split."
     },
     {
       "country": "Netherlands",
-      "note": "Festland + Bonaire (Karibik) -- echte getrennte Landmassen."
+      "note": "Mainland + Bonaire (Caribbean) -- genuinely separate landmasses."
     },
     {
       "country": "Kiribati",
-      "note": "Tarawa + Tabwakea/Kiritimati -- echte getrennte Landmassen, gegenueberliegende Seiten des 180.-Meridians."
+      "note": "Tarawa + Tabwakea/Kiritimati -- genuinely separate landmasses, opposite sides of the 180th meridian."
     }
   ]
 }

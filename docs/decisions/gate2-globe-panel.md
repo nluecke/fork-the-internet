@@ -1,88 +1,87 @@
-# Gate 2 — Globus-Panel: Entscheidung
+# Gate 2 — Globe Panel: Decision
 
-**Datum:** 2026-08-02
-**Ergebnis:** ✅ bestanden. Option 1 (Business Charts / Apache ECharts + echarts-gl).
+**Date:** 2026-08-02
+**Result:** ✅ passed. Option 1 (Business Charts / Apache ECharts + echarts-gl).
 
-## Minimaltest
+## Minimal test
 
-Panel-Typ `volkovlabs-echarts-panel` (Grafana Labs, vormals Volkov Labs — siehe
-Hinweis unten) in Grafana Cloud (`svanfr.grafana.net`) installiert und getestet.
-Dashboard: `nluecke > Fun > Gate 2 — Globe Minimaltest` (uid `am8fqq`).
+Panel type `volkovlabs-echarts-panel` (Grafana Labs, formerly Volkov Labs — see note
+below) installed and tested in Grafana Cloud (`svanfr.grafana.net`).
+Dashboard: `nluecke > Fun > Gate 2 — Globe Minimal Test` (uid `am8fqq`).
 
-Acht echte Seekabel aus `data/samples/telegeography-cable-geo.json` ausgewählt
-(längste Great-Circle-Strecken: Project Waterworth, MAREA, SEA-US, AAG, Seabras-1,
-Southern Cross, WACS, SeaMeWe-4), Start-/Endpunkte als `lines3D`-Serie auf
-`coordinateSystem: 'globe'` gerendert. Ergebnis: Kugel mit acht Kabelbögen, per
-`get_panel_image` gerendert und visuell bestätigt.
+Eight real submarine cables selected from `data/samples/telegeography-cable-geo.json`
+(longest great-circle spans: Project Waterworth, MAREA, SEA-US, AAG, Seabras-1,
+Southern Cross, WACS, SeaMeWe-4), start/end points rendered as a `lines3D` series on
+`coordinateSystem: 'globe'`. Result: a globe with eight cable arcs, rendered via
+`get_panel_image` and visually confirmed.
 
-**Offener Kosmetik-Punkt:** Die Globus-Textur (`world.topo.bathy...jpg`, extern von
-`echarts.apache.org` geladen) blieb im Server-seitigen Headless-Rendering weiß — vermutlich
-Timing/CORS beim Bild-Renderer, kein grundsätzliches Problem. Für den Produktivbau:
-Textur selbst hosten oder als Build-Artefakt einbetten statt zur Laufzeit von einer
-externen CDN zu laden — konsistent mit Prinzip 1 (keine Live-Fremdabhängigkeit in der
-Voting-Woche).
+**Open cosmetic point:** the globe texture (`world.topo.bathy...jpg`, loaded externally
+from `echarts.apache.org`) stayed white in server-side headless rendering — likely a
+timing/CORS issue with the image renderer, not a fundamental problem. For the production
+build: self-host the texture or embed it as a build artifact instead of loading it at
+runtime from an external CDN — consistent with Principle 1 (no live third-party
+dependency during voting week).
 
-## Zweites Kriterium: Reagiert der Globus auf Variablen ohne vollen Neuaufbau?
+## Second criterion: does the globe react to variables without a full rebuild?
 
-Mit Dashboard-Variable `cut_cable` getestet: `context.grafana.replaceVariables('$cut_cable')`
-in `getOption` gelesen, passendes Kabel korrekt rot markiert (`var-cut_cable=MAREA` →
-die reale MAREA-Route Virginia Beach–Bilbao wird rot). Interaktion funktioniert.
+Tested with dashboard variable `cut_cable`: `context.grafana.replaceVariables('$cut_cable')`
+read inside `getOption`, correctly highlights the matching cable in red
+(`var-cut_cable=MAREA` → the real MAREA route Virginia Beach–Bilbao turns red).
+Interaction works.
 
-**Quellcode-Analyse** (`github.com/grafana/business-charts`,
-`src/components/EchartsPanel/EchartsPanel.tsx`) statt Browser-Interaktionstest, da in
-dieser Session kein Browser-Tool verfügbar war — liefert eine präzisere Antwort als ein
-Klicktest:
+**Source code analysis** (`github.com/grafana/business-charts`,
+`src/components/EchartsPanel/EchartsPanel.tsx`) instead of an interactive browser test,
+since no browser tool was available in this session — this gives a more precise answer
+than a click test would:
 
-1. Die ECharts-Instanz wird **nur** bei Änderung von `options.renderer`, `options.map`
-   oder `options.themeEditor.*` disposed/neu erstellt (Zeile 112–115). Datenänderungen
-   und Variablenänderungen lösen das **nicht** aus — kein WebGL-Kontextverlust, kein
-   voller Neuaufbau im eigentlichen Sinn.
-2. Bei jeder Datenänderung läuft aber standardmäßig
-   `chart.setOption(option, notMerge=true)` (Zeile 254, 288–294) — **vollständiges
-   Ersetzen**, nicht Mergen. Für `globe.viewControl` (echarts-gl) bedeutet das: eine vom
-   Nutzer per Maus gedrehte Kamera springt bei jeder Szenario-Änderung auf die im
-   zurückgegebenen Option-Objekt angegebene (oder default) Ausrichtung zurück — **das ist
-   der eigentliche Trägheits-Risikopunkt aus dem Briefing**, präziser gefasst: nicht
-   Neuaufbau, sondern Kamera-Reset.
-3. **Mitigation vorhanden:** Der Panel-Code unterstützt ein v2-Rückgabeformat
-   (`{ version: 2, option, notMerge: false }`, Zeile 259–277). Mit `notMerge: false`
-   merged ECharts statt zu ersetzen — wenn `viewControl` dabei aus dem zurückgegebenen
-   Option-Objekt weggelassen wird, bleibt die aktuelle Kamera-Position erhalten.
-   **Regel für den Produktivbau:** jede `getOption`-Funktion im echten Dashboard muss
-   das v2-Format mit `notMerge: false` verwenden, sonst resettet jede What-If-Aktion die
-   Kameraperspektive.
-4. Der Re-Render-Effect hängt an `data` (Zeile 305) — er läuft nur, wenn sich das
-   Query-Ergebnis des Panels ändert. Das heißt: **eine `var-*`-URL-Variable aktualisiert
-   den Globus nur, wenn sie tatsächlich in der Datenquellen-Query verwendet wird**
-   (z. B. in der Infinity-URL oder im jq-Filterausdruck interpoliert) — ein reines
-   `context.grafana.replaceVariables()` in `getOption` allein reicht nicht, wenn Grafana
-   keinen Query-Refresh auslöst. **Konsequenz für Stufe 1–3:** jede Szenario-Variable
-   muss in der jeweiligen Infinity-Query referenziert werden, sonst bleibt das Panel
-   bei einer URL-Änderung optisch stehen, bis ein unabhängiger Refresh passiert.
+1. The ECharts instance is disposed/recreated **only** when `options.renderer`,
+   `options.map`, or `options.themeEditor.*` change (lines 112–115). Data changes and
+   variable changes do **not** trigger this — no WebGL context loss, no full rebuild in
+   the strict sense.
+2. On every data change, however, `chart.setOption(option, notMerge=true)` runs by
+   default (lines 254, 288–294) — a **full replace**, not a merge. For
+   `globe.viewControl` (echarts-gl) that means: a camera the user has dragged/rotated
+   snaps back to the orientation given in the returned option object (or the default)
+   on every scenario change — **this is the actual inertia risk point from the
+   briefing**, more precisely stated: not a rebuild, but a camera reset.
+3. **Mitigation available:** the panel code supports a v2 return format
+   (`{ version: 2, option, notMerge: false }`, lines 259–277). With `notMerge: false`,
+   ECharts merges instead of replacing — if `viewControl` is omitted from the returned
+   option object, the current camera position is preserved.
+   **Rule for the production build:** every `getOption` function in the real dashboard
+   must use the v2 format with `notMerge: false`, otherwise every what-if action resets
+   the globe's camera perspective.
+4. The re-render effect is keyed on `data` (line 305) — it only runs when the panel's
+   query result changes. This means: **a `var-*` URL variable only updates the globe if
+   it is actually used in the data source query** (e.g. interpolated into the Infinity
+   URL or the jq filter expression) — a plain `context.grafana.replaceVariables()` call
+   inside `getOption` alone is not enough if Grafana doesn't trigger a query refresh.
+   **Consequence for Stage 1–3:** every scenario variable must be referenced in its
+   respective Infinity query, otherwise the panel stays visually frozen after a URL
+   change until an unrelated refresh happens.
 
-## Nebenbefund: Volkov Labs
+## Side finding: Volkov Labs
 
-Volkov Labs wurde von Enerview.AI übernommen, die alte Demo-/Doku-Seite
-(`echarts.volkovlabs.io`, `volkovlabs.io`) ist tot ("Closed for Business"). Die Plugins
-selbst sind aber nicht verwaist: Repo und Paket laufen jetzt unter der Organisation
-`grafana` (`github.com/grafana/business-charts`, `signatureOrg: "Grafana Labs"` im
-Plugin-Katalog) weiter aktiv gepflegt. Kein Blocker, aber gut zu wissen, falls die
-Doku-Links in der Einreichung erwähnt werden.
+Volkov Labs was acquired by Enerview.AI; the old demo/docs site (`echarts.volkovlabs.io`,
+`volkovlabs.io`) is dead ("Closed for Business"). The plugins themselves are not
+orphaned, though: the repo and package now live and are actively maintained under the
+`grafana` organization (`github.com/grafana/business-charts`,
+`signatureOrg: "Grafana Labs"` in the plugin catalog). Not a blocker, but good to know in
+case the docs links are mentioned in the submission.
 
-## Nebenbefund: Service-Account-Rolle
+## Side finding: service account role
 
-Der MCP-Service-Account war entgegen der bisherigen Annahme nur mit Viewer-Rechten
-ausgestattet (nur `*:read`-Permissions), nicht Editor. Nutzer hat während dieser Session
-auf Editor hochgestuft. Plugin-Installation selbst braucht ohnehin `plugins:install`
-(Admin) und wurde manuell in der UI durchgeführt.
+Contrary to prior assumption, the MCP service account only had viewer rights
+(`*:read` permissions only), not editor. The user upgraded it to editor during this
+session. Plugin installation itself requires `plugins:install` (admin) regardless and was
+done manually in the UI.
 
-## Entscheidung
+## Decision
 
-Option 1 (Business Charts / echarts-gl) wird die Grundlage für das Globus-Panel.
-Vor dem Weiterbau (Schritt 4 ff.) zwei Regeln festhalten:
+Option 1 (Business Charts / echarts-gl) becomes the foundation for the globe panel.
+Two rules to hold onto before continuing the build (Step 4 onward):
 
-- `getOption` gibt immer `{ version: 2, option: {...}, notMerge: false }` zurück,
-  `viewControl` wird nur einmalig beim ersten Aufbau gesetzt, nicht bei jedem Update.
-- Jede Szenario-Variable, die den Globus beeinflussen soll, wird in der Infinity-Query
-  selbst referenziert (nicht nur in `getOption` gelesen), damit Grafana den Refresh
-  überhaupt auslöst.
+- `getOption` always returns `{ version: 2, option: {...}, notMerge: false }`;
+  `viewControl` is only ever set once at initial construction, never on every update.
+- Every scenario variable meant to affect the globe is referenced in the Infinity query
+  itself (not just read inside `getOption`), so Grafana actually triggers a refresh.

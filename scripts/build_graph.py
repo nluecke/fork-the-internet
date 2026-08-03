@@ -3,7 +3,7 @@
 
 Pulls live submarine-cable topology from TeleGeography, builds the
 physical/country graph described in docs/decisions/003-graph-schema.md
-(final after Review-Runde 3), and writes data/graph.json.
+(final after review round 3), and writes data/graph.json.
 
 Run: python3 scripts/build_graph.py
 """
@@ -67,7 +67,7 @@ def to_lonlat(x, y, z):
 
 
 def spherical_centroid(points):
-    """points: list of (id, lon, lat). Antimeridian-safe centroid (003, Punkt 1)."""
+    """points: list of (id, lon, lat). Antimeridian-safe centroid (003, Point 1)."""
     xs = ys = zs = 0.0
     for _, lon, lat in points:
         x, y, z = to_cartesian(lon, lat)
@@ -205,7 +205,7 @@ def fetch_all_cable_details(cable_ids, log=print):
 
 
 # --------------------------------------------------------------------------
-# Matching + chaining (003, Punkt 3 + 3a)
+# Matching + chaining (003, Point 3 + 3a)
 # --------------------------------------------------------------------------
 
 def dedupe_consecutive_vertices(line):
@@ -306,7 +306,7 @@ def match_and_chain_cable(cid, cable_detail, lines_by_cable, lp_coords):
 
     # Emit submarine edges: per segment, sort placements by vertex index (= arc-length
     # position), consecutive pairs become edges, weight = polyline arc length (003a,
-    # Punkt 3a).
+    # Point 3a).
     submarine_edges = []
     connected = set()
     for seg_idx, placements in seg_placements.items():
@@ -339,7 +339,7 @@ def match_and_chain_cable(cid, cable_detail, lines_by_cable, lp_coords):
         })
         warnings.append({
             "type": "inferred_edge", "landing_point_id": lpid, "cable_id": cid,
-            "detail": "kein Segment-Endpunkt und kein Vertex innerhalb 50 km; Kante zum naechsten gematchten Landing Point desselben Kabels",
+            "detail": "no segment endpoint and no vertex within 50 km; edge to the nearest matched landing point of the same cable",
         })
         covered.add(lpid)
         connected.add(lpid)
@@ -347,7 +347,7 @@ def match_and_chain_cable(cid, cable_detail, lines_by_cable, lp_coords):
 
     # Tier 4: branch fallback -- matched (tier1/tier2) LPs with no pairing partner on
     # their own segment (e.g. a short spur off an undeclared branching unit). Chord to
-    # nearest already-connected LP on the same cable (003, Punkt 3a).
+    # nearest already-connected LP on the same cable (003, Point 3a).
     orphans = [lpid for lpid in covered if lpid not in connected]
     if orphans and not connected:
         # Every declared landing point on this cable sits alone on its own segment --
@@ -356,7 +356,7 @@ def match_and_chain_cable(cid, cable_detail, lines_by_cable, lp_coords):
         # to, so it would otherwise spin through all orphans without ever connecting
         # one (found live: equiano, bifrost, echo and 33 other cables end up with
         # zero edges, no warning, fully silent). Bootstrap with the lexicographically
-        # first orphan as a deterministic seed (Prinzip 3).
+        # first orphan as a deterministic seed (Principle 3).
         seed = min(orphans)
         connected.add(seed)
         orphans = [x for x in orphans if x != seed]
@@ -385,14 +385,14 @@ def match_and_chain_cable(cid, cable_detail, lines_by_cable, lp_coords):
     for lpid in unmatched:
         warnings.append({
             "type": "unmatched_landing_point", "landing_point_id": lpid, "cable_id": cid,
-            "detail": "kein Match in Tier 1-4 gefunden; Landing Point wird ausgelassen",
+            "detail": "no match found in Tier 1-4; landing point is dropped",
         })
 
     return submarine_edges, warnings
 
 
 # --------------------------------------------------------------------------
-# Landmass groups (003, Punkt 1)
+# Landmass groups (003, Point 1)
 # --------------------------------------------------------------------------
 
 def load_landmass_groups():
@@ -414,8 +414,8 @@ def build_landmass_groups(by_country, force_same_landmass, accepted_separate):
 
     Every country whose threshold clustering yields more than one group after applying
     force_same_landmass must be declared in accepted_separate -- otherwise the build
-    fails loudly instead of silently shipping an undeclared split (003, Punkt 1: "Zerfaellt
-    Argentinien kuenftig, fehlt still eine vierte Bruecke").
+    fails loudly instead of silently shipping an undeclared split (003, Point 1: "if
+    Argentina splits apart in the future, a fourth bridge silently goes missing").
     """
     final_groups = {}
     errors = []
@@ -466,7 +466,7 @@ def build_landmass_groups(by_country, force_same_landmass, accepted_separate):
 
 
 # --------------------------------------------------------------------------
-# Terrestrial edges (003, Punkt 2)
+# Terrestrial edges (003, Point 2)
 # --------------------------------------------------------------------------
 
 def build_terrestrial_edges(final_groups):
@@ -474,7 +474,7 @@ def build_terrestrial_edges(final_groups):
 
     edges: list of dicts (MST within each group + one hub-attach edge).
     hubs: list of dicts {id, country, lon, lat, member_count}.
-    warnings: high_intra_group_latency entries (003, Punkt 2).
+    warnings: high_intra_group_latency entries (003, Point 2).
     """
     edges = []
     hubs = []
@@ -502,7 +502,7 @@ def build_terrestrial_edges(final_groups):
                     warnings.append({
                         "type": "high_intra_group_latency", "group": f"{country} (hub {hub_id})",
                         "modelled_latency_ms": round(lat, 1), "threshold_ms": HIGH_LATENCY_WARNING_MS,
-                        "detail": "modellierter MST-Durchmesser dieser Landmass-Gruppe uebersteigt eine reale Interkontinental-Referenzstrecke (NY-London ~28.75ms)",
+                        "detail": "modelled MST diameter of this landmass group exceeds a real intercontinental reference distance (NY-London ~28.75ms)",
                     })
 
             nearest = min(group, key=lambda p: gc_dist((p[1], p[2]), (clon, clat)))
@@ -516,7 +516,7 @@ def build_terrestrial_edges(final_groups):
 
 
 # --------------------------------------------------------------------------
-# Baseline betweenness + unreachable pairs (003, Punkt 5)
+# Baseline betweenness + unreachable pairs (003, Point 5)
 # --------------------------------------------------------------------------
 
 def dijkstra(adj, src):
@@ -569,7 +569,7 @@ def compute_baseline_and_unreachable(nodes_adj, hubs_by_country):
     """Runs one Dijkstra per hub, derives country-pair reachability (min over hub
     combinations) and increments baseline_pair_path_count per edge on each country
     pair's shortest path. Also counts unreachable country pairs and countries
-    isolated from the largest connected component (003, Punkt 5).
+    isolated from the largest connected component (003, Point 5).
     """
     countries = sorted(hubs_by_country.keys())
     all_hubs = [h for hids in hubs_by_country.values() for h in hids]
@@ -660,7 +660,7 @@ def build_artifact(log=print):
             continue
         by_country[country].append((lpid, coord[0], coord[1]))
 
-    log("building submarine edges (matching + chaining, 003 Punkt 3 + 3a)...")
+    log("building submarine edges (matching + chaining, 003 Point 3 + 3a)...")
     all_submarine_edges = []
     all_warnings = []
     for cid, cable in details.items():
@@ -668,11 +668,11 @@ def build_artifact(log=print):
         all_submarine_edges.extend(edges)
         all_warnings.extend(warns)
 
-    log("building landmass groups + build check (003 Punkt 1)...")
+    log("building landmass groups + build check (003 Point 1)...")
     force_same_landmass, accepted_separate = load_landmass_groups()
     final_groups = build_landmass_groups(by_country, force_same_landmass, accepted_separate)
 
-    log("building terrestrial edges (MST + hub attach, 003 Punkt 2)...")
+    log("building terrestrial edges (MST + hub attach, 003 Point 2)...")
     terrestrial_edges, hubs, latency_warnings = build_terrestrial_edges(final_groups)
     all_warnings.extend(latency_warnings)
 
@@ -688,7 +688,7 @@ def build_artifact(log=print):
 
     # assemble edges array + adjacency + edge_index + cables index
     # Edge ids are derived from stable content (cable_id/segment_index/endpoints or
-    # from/to node ids), never from insertion order -- 003, Punkt 7: a var-cut_edge=X
+    # from/to node ids), never from insertion order -- 003, Point 7: a var-cut_edge=X
     # link must keep resolving to the same edge across weekly rebuilds even if the
     # array position it lands on shifts.
     edges = []
@@ -729,12 +729,12 @@ def build_artifact(log=print):
     # point IDs (e.g. manama-bahrain/amwaj-island-bahrain), or a landmass group has
     # exactly one member so its hub coincides with that member exactly. That is a
     # true reflection of the input, not a bug -- surfaced as a warning, not a build
-    # failure (Prinzip 4, "Modell ist inspizierbar").
+    # failure (Principle 4, "the model is inspectable").
     for e in edges:
         if e["distance_km"] == 0:
             all_warnings.append({
                 "type": "zero_distance_edge", "edge_id": e["id"],
-                "detail": "Kante rundet auf 0.0 km -- Endpunkte laut Quelldaten identisch oder unter 50 m auseinander, bzw. Hub-Anbindung einer Landmass-Gruppe mit nur einem Mitglied",
+                "detail": "edge rounds to 0.0 km -- endpoints identical per source data or under 50 m apart, or hub attachment of a landmass group with only one member",
             })
 
     adjacency = collections.defaultdict(list)
@@ -758,7 +758,7 @@ def build_artifact(log=print):
         cables[cid]["landing_point_ids"].add(e["to"])
     cables = {k: {"name": v["name"], "edge_indices": v["edge_indices"], "landing_point_ids": sorted(v["landing_point_ids"])} for k, v in cables.items()}
 
-    log("computing baseline betweenness + unreachable pairs (003 Punkt 5)...")
+    log("computing baseline betweenness + unreachable pairs (003 Point 5)...")
     hubs_by_country = collections.defaultdict(list)
     for h in hubs:
         hubs_by_country[h["country"]].append(h["id"])
@@ -785,12 +785,12 @@ def build_artifact(log=print):
             "high_intra_group_latency_warning_ms": HIGH_LATENCY_WARNING_MS,
         },
         "scope_note": (
-            "Dieses Modell bildet ausschliesslich Seekabel-Konnektivitaet ab. Jede rein "
-            "landgebundene Verbindung zwischen zwei Laendern fehlt -- auch zwischen "
-            "Nachbarlaendern mit eigenen Landing Points. Die einzige Ausnahme sind die in "
-            "data/landmass_groups.json deklarierten Zusammenschluesse zur Erhaltung des "
-            "innerstaatlichen Zusammenhalts einzelner grosser Laender -- keine allgemeine "
-            "Grenzmodellierung, und keine eigene Kantenart."
+            "This model represents submarine cable connectivity only. Any purely "
+            "land-based connection between two countries is missing -- even between "
+            "neighboring countries with their own landing points. The only exception "
+            "are the mergers declared in data/landmass_groups.json to preserve the "
+            "intra-country cohesion of individual large countries -- not general "
+            "border modelling, and not its own edge type."
         ),
         "unreachable_baseline_pairs": unreachable_pairs,
         "total_country_pairs": total_pairs,
@@ -807,7 +807,7 @@ def build_artifact(log=print):
 
 
 # --------------------------------------------------------------------------
-# Sanity checks (Phase B requirement, Runde 1 Auftrag)
+# Sanity checks (Phase B requirement, round 1 requirement)
 # --------------------------------------------------------------------------
 
 def run_sanity_checks(artifact, log=print):
@@ -840,7 +840,7 @@ def run_sanity_checks(artifact, log=print):
     if absurd_length:
         failures.append(f"{len(absurd_length)} edges longer than half the Earth's circumference: {absurd_length[:10]}")
 
-    # node/edge counts in expected order of magnitude (per docs/decisions/003, Runde 3)
+    # node/edge counts in expected order of magnitude (per docs/decisions/003, round 3)
     n_landing_points = sum(1 for n in nodes.values() if n["type"] == "landing_point")
     n_hubs = sum(1 for n in nodes.values() if n["type"] == "country_hub")
     if not (1500 <= n_landing_points <= 2500):
@@ -851,7 +851,7 @@ def run_sanity_checks(artifact, log=print):
         failures.append(f"edge count {len(edges)} outside expected range [3000, 6000]")
 
     # known-islands check: isolated countries must be listed explicitly and stay below
-    # the stop threshold set in Review-Runde 3 -- a sudden jump means the matching/
+    # the stop threshold set in review round 3 -- a sudden jump means the matching/
     # chaining broke, not that the world got more disconnected overnight
     unreachable = artifact["unreachable_baseline_pairs"]
     total_pairs = artifact["total_country_pairs"]
@@ -859,7 +859,7 @@ def run_sanity_checks(artifact, log=print):
     if len(isolated) > SANITY_MAX_ISOLATED_COUNTRIES:
         failures.append(
             f"{len(isolated)} fully isolated countries, above the stop threshold of "
-            f"{SANITY_MAX_ISOLATED_COUNTRIES} (003, Punkt 5): {isolated}"
+            f"{SANITY_MAX_ISOLATED_COUNTRIES} (003, Point 5): {isolated}"
         )
     log(f"unreachable_baseline_pairs: {unreachable} / {total_pairs}, isolated countries: {isolated}")
 

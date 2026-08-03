@@ -1,48 +1,47 @@
-# Datenquellen-Validierung — Stand 2026-08-02
+# Data Source Validation — Status 2026-08-02
 
-> Kompakte Zusammenfassung für's Planen der nächsten Schritte. Volle Details,
-> Rohbegründungen und das Entscheidungslog stehen in den internen Projektnotizen
-> (nicht Teil dieses Repos), Abschnitt "Offene Frage 1" — dieses Dokument ist der
-> Extrakt daraus.
+> Compact summary for planning next steps. Full details, raw rationale, and the
+> decision log live in the internal project notes (not part of this repo), section
+> "Open Question 1" — this document is the extract from that.
 
-## Ergebnis: Gate 1 ("Reichen die Daten?") erreicht ✅
+## Result: Gate 1 ("Is the data sufficient?") reached ✅
 
-Alle 7 Quellen aus der ursprünglichen Checkliste wurden real angefragt, Response-Samples
-liegen unter `data/samples/`.
+All 7 sources from the original checklist were queried for real; response samples
+live under `data/samples/`.
 
-| Quelle | Status | Liefert | Kernbefund |
+| Source | Status | Provides | Key finding |
 |---|---|---|---|
-| TeleGeography Submarine Cable Map | ✅ anonym | Kabelgeometrie (718 Kabel), Landing Points (1922) | Lizenz CC BY-SA 4.0 für Referenzen/Screenshots geklärt, kommerzielle Datennutzung separat lizenzpflichtig (nicht relevant für uns) |
-| PeeringDB | ✅ anonym | IXPs, Netze, Facilities | `info_traffic` als grobe Kapazitäts-Kategorie (z.B. "50-100Tbps") |
-| CAIDA AS Rank | ✅ anonym | AS-Graph, Beziehungstyp (customer/peer/provider) | Graphstruktur, keine Latenz/Kapazität |
-| RIPEstat | ✅ anonym | AS-Nachbarn, Country-Routing-Stats | Baseline-Zeitreihen, keine Latenz als Kantengewicht |
-| **RIPE Atlas** | ✅ anonym | Traceroute-Messungen, tausende Probes seit 2010 | **Echte gemessene Per-Hop-RTT** — schließt die Latenzlücke der vier obigen Quellen |
-| **IODA** | ✅ anonym (Domain umgezogen: `ioda.inetintel.cc.gatech.edu`) | Historische Outage-/Latenz-Zeitreihen pro Land | Direkt nutzbar für die geplante Validierung gegen echte Kabelschnitte |
-| Cloudflare Radar | ⚠️ auth-pflichtig | Traffic, Outage-Annotationen, AS-Rankings | Braucht Free-Tier-Token; architektonisch okay (Token bleibt Server-Secret in Grafana, kein Leak über die URL), aber Rate-Limit gegen Voting-Woche-Traffic ungeklärt, Account noch nicht angelegt |
+| TeleGeography Submarine Cable Map | ✅ anonymous | Cable geometry (718 cables), landing points (1922) | License CC BY-SA 4.0 clarified for references/screenshots; commercial data use is separately licensed (not relevant to us) |
+| PeeringDB | ✅ anonymous | IXPs, networks, facilities | `info_traffic` as a coarse capacity category (e.g. "50-100Tbps") |
+| CAIDA AS Rank | ✅ anonymous | AS graph, relationship type (customer/peer/provider) | Graph structure, no latency/capacity |
+| RIPEstat | ✅ anonymous | AS neighbors, country routing stats | Baseline time series, no latency as an edge weight |
+| **RIPE Atlas** | ✅ anonymous | Traceroute measurements, thousands of probes since 2010 | **Real measured per-hop RTT** — closes the latency gap left by the four sources above |
+| **IODA** | ✅ anonymous (domain moved: `ioda.inetintel.cc.gatech.edu`) | Historical outage/latency time series per country | Directly usable for the planned validation against real cable cuts |
+| Cloudflare Radar | ⚠️ requires auth | Traffic, outage annotations, AS rankings | Needs a free-tier token; architecturally fine (token stays a server secret in Grafana, no leak via the URL), but the rate limit against voting-week traffic is unresolved, account not yet created |
 
-**Kriterium erfüllt:** Graph aus Topologie (TeleGeography, CAIDA, RIPEstat, PeeringDB) plus
-echter Latenz (RIPE Atlas) plus Validierungsdaten (IODA) trägt. Die zwischenzeitlich
-erwogene Notlösung — Latenz aus Kabelgeometrie via Great-Circle-Distanz × Lichtgeschwindigkeit
-in Faser — ist nicht mehr nötig, bleibt aber als dokumentierter Fallback für Kantenpaare ohne
-Atlas-Messung.
+**Criterion met:** a graph built from topology (TeleGeography, CAIDA, RIPEstat, PeeringDB)
+plus real latency (RIPE Atlas) plus validation data (IODA) holds up. The stopgap
+considered in the meantime — latency derived from cable geometry via great-circle
+distance × speed of light in fiber — is no longer necessary, but remains a documented
+fallback for edge pairs without an Atlas measurement.
 
-## Offene Punkte aus der Datenrunde
+## Open items from the data round
 
-- Cloudflare Radar: Free-Tier-Account + Token anlegen, Rate-Limit gegen erwarteten
-  Voting-Woche-Traffic abschätzen.
-- RIPE Atlas: bei jeder künftigen Abfrage `probe_ids` eng filtern und `start`/`stop` klein
-  halten — ein ungefiltertes 2h-Fenster über alle Probes einer Messung zog 56 MB.
-- IODA-Entities-Liste ist groß (alle Länder/Kontinente); für konkrete Szenarien reicht ein
-  gezielter `fqid`-Lookup pro betroffenem Land.
+- Cloudflare Radar: create a free-tier account + token, estimate the rate limit against
+  expected voting-week traffic.
+- RIPE Atlas: for every future query, filter `probe_ids` tightly and keep `start`/`stop`
+  narrow — an unfiltered 2h window across all probes of one measurement pulled 56 MB.
+- The IODA entities list is large (all countries/continents); for concrete scenarios a
+  targeted `fqid` lookup per affected country is enough.
 
-## Nicht Teil dieses Dokuments
+## Not part of this document
 
-Die eigentliche historische Ereignis-Validierung (Modell-Vorhersage vs. RIPE-Atlas-/IODA-
-Messwerte beim Rotes-Meer- oder Tonga-Kabelschnitt) ist noch nicht gebaut — dafür muss erst
-das Graph-Modell Stufe 1/2 stehen (siehe "Nächste Schritte" in den internen
-Projektnotizen). Dieses Dokument bekommt dann einen zweiten Abschnitt.
+The actual historical event validation (model prediction vs. RIPE Atlas/IODA
+measurements for the Red Sea or Tonga cable cuts) has not been built yet — that
+requires graph model Stage 1/2 to be in place first (see "Next steps" in the internal
+project notes). This document will then get a second section.
 
-## Nächstes Gate
+## Next gate
 
-Globus-Panel verifizieren (Business Charts Panel / ECharts-GL vs. Dynamic-Text-Panel mit
-`globe.gl` vs. native Geomap als Fallback) — siehe `docs/decisions/` für den Ausgang.
+Verify the globe panel (Business Charts panel / ECharts-GL vs. dynamic text panel with
+`globe.gl` vs. native Geomap as fallback) — see `docs/decisions/` for the outcome.

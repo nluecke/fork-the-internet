@@ -1,72 +1,72 @@
-# 003a — Snapping-Trefferquote (Verifikation vor dem Generator)
+# 003a — Snapping Match Rate (Verification Before the Generator)
 
-**Datum:** 2026-08-09, aktualisiert in Review-Runde 2 (Matching-Algorithmus korrigiert).
-**Gehört zu:** `003-graph-schema.md`, Punkt 3 (Kabel → Kanten). Punkt 3 selbst (welcher
-Landing Point zu welchem Segment/Vertex gehört — die Tiers 1–3 unten) wurde in
-Review-Runde 3 final freigegeben und unverändert übernommen. Was sich in Runde 3 änderte,
-ist eine Ebene darüber: **wie** aus den hier ermittelten Zuordnungen tatsächlich Kanten
-werden (Reihenfolge/Kettenbildung, plus ein vierter Fallback für Landing Points ohne
-Kettenpartner) — das steht in `003-graph-schema.md`, Punkt 3a, nicht hier. Die Zahlen in
-diesem Dokument (Tier 1/2/3-Verteilung) bleiben gültig.
-**Methode:** Alle 697 eindeutigen Kabel per `GET
-https://www.submarinecablemap.com/api/v3/cable/{id}.json` einzeln abgefragt (697/697
-erfolgreich, 0 Fehler), gegen `data/samples/telegeography-cable-geo.json` (Geometrie)
-und `data/samples/telegeography-landing-point-geo.json` (Koordinaten) geprüft. Skript
-und Rohdaten liegen nicht im Repo (Verifikationslauf, kein Build-Artefakt) — Ergebnis
-hier vollständig dokumentiert, reproduzierbar mit derselben API.
+**Date:** 2026-08-09, updated in review round 2 (matching algorithm corrected).
+**Belongs to:** `003-graph-schema.md`, Point 3 (cable → edges). Point 3 itself (which
+landing point belongs to which segment/vertex — Tiers 1–3 below) was finally approved
+in review round 3 and carried over unchanged. What changed in round 3 is one layer
+above that: **how** the assignments determined here actually become edges
+(ordering/chaining, plus a fourth fallback for landing points with no chain partner) —
+that's in `003-graph-schema.md`, Point 3a, not here. The numbers in this document
+(Tier 1/2/3 distribution) remain valid.
+**Method:** all 697 unique cables individually queried via `GET
+https://www.submarinecablemap.com/api/v3/cable/{id}.json` (697/697 successful,
+0 errors), checked against `data/samples/telegeography-cable-geo.json` (geometry) and
+`data/samples/telegeography-landing-point-geo.json` (coordinates). Script and raw data
+are not in the repo (a verification run, not a build artifact) — the result is fully
+documented here, reproducible with the same API.
 
-**Erste Korrektur gegenüber `003-graph-schema.md`:** Das Schema-Dokument zählte
-"718 Kabel". Das ist die Zahl der GeoJSON-*Features* in `cable-geo.json` — 21 Kabel sind
-auf mehrere Features aufgeteilt (dieselbe `properties.id` erscheint mehrfach, mit
-jeweils eigenem `MultiLineString`). Die Zahl der **eindeutigen Kabel** (und damit der
-`cables`-Index-Einträge im Artefakt) ist **697**, nicht 718. `cable-geo.json`- und
-Cable-Detail-IDs stimmen exakt überein (697 = 697, keine Differenz in beide Richtungen).
+**First correction against `003-graph-schema.md`:** the schema document counted
+"718 cables". That is the number of GeoJSON *features* in `cable-geo.json` — 21 cables
+are split across multiple features (the same `properties.id` appears more than once,
+each with its own `MultiLineString`). The number of **unique cables** (and hence of
+`cables` index entries in the artifact) is **697**, not 718. IDs in `cable-geo.json` and
+in the cable detail endpoint match exactly (697 = 697, no difference either way).
 
 ---
 
-## Review-Runde 2: Matching-Algorithmus korrigiert
+## Review round 2: matching algorithm corrected
 
-Die Zahlen unten ersetzen die erste Fassung. Der ursprüngliche Zähl-Algorithmus
-("unabhängiges Nearest-Match pro Landing Point") unterstellte implizit eine Bijektion
-zwischen Segment-Endpunkten und Landing Points. Es gibt aber 3.860 Segment-Endpunkte auf
-nur 3.184 deklarierte Paare — ein Landing Point, an dem ein Kabel durchläuft, ist
-Endpunkt von **zwei** Segmenten, keine Ausnahme, sondern der Normalfall bei
-Durchgangsstationen. Korrigiert auf ein echtes many-to-one-Matching (siehe
-`003-graph-schema.md`, Punkt 3, für den vollen Algorithmus): jeder Endpunkt bekommt
-genau einen Landing Point, ein Landing Point darf mehrere Endpunkte bekommen.
+The numbers below replace the first version. The original counting algorithm
+("independent nearest-match per landing point") implicitly assumed a bijection between
+segment endpoints and landing points. But there are 3,860 segment endpoints against only
+3,184 declared pairs — a landing point where a cable passes through is the endpoint of
+**two** segments; that's not the exception but the normal case for pass-through
+stations. Corrected to true many-to-one matching (see `003-graph-schema.md`, Point 3, for
+the full algorithm): each endpoint gets exactly one landing point, a landing point may
+receive multiple endpoints.
 
-## Ergebnis: 99,8 % → weiterhin 99,8 % sauber, aber andere Verteilung
+## Result: 99.8% → still 99.8% clean, but a different distribution
 
-| Kategorie | Anzahl (korrigiert) | Anteil | Anzahl (erste, fehlerhafte Zählung) |
+| Category | Count (corrected) | Share | Count (first, flawed count) |
 |---|---|---|---|
-| Tier 1: Endpunkt-Match (≤ 50 km) | 2.646 | 83,1 % | 2.772 |
-| Tier 2: Vertex-Split (innerer Linienpunkt ≤ 50 km) | 531 | 16,7 % | 405 |
-| **sauber (Tier 1 + 2)** | **3.177** | **99,8 %** | 3.177 |
-| Tier 3: inferred (Kante zum nächsten bereits zugeordneten Landing Point) | 7 | 0,2 % | 7 |
-| kein Match möglich | 0 | 0 % | 0 |
-| **Gesamt (deklarierte Cable↔Landing-Point-Paare)** | **3.184** | 100 % | 3.184 |
+| Tier 1: endpoint match (≤ 50 km) | 2,646 | 83.1% | 2,772 |
+| Tier 2: vertex split (interior line point ≤ 50 km) | 531 | 16.7% | 405 |
+| **clean (Tier 1 + 2)** | **3,177** | **99.8%** | 3,177 |
+| Tier 3: inferred (edge to the nearest already-matched landing point) | 7 | 0.2% | 7 |
+| no match possible | 0 | 0% | 0 |
+| **Total (declared cable↔landing-point pairs)** | **3,184** | 100% | 3,184 |
 
-Die Gesamtquote (99,8 % sauber) bleibt identisch — aber deutlich mehr Fälle landen jetzt
-korrekt im Vertex-Tier statt fälschlich als Endpunkt-Match durchzugehen. Grund: im alten
-Algorithmus konnte ein Landing Point, sobald es als "vergeben" markiert war, keinem
-weiteren Endpunkt mehr zugeordnet werden — bei Durchgangsstationen (zwei Endpunkte am
-selben Ort) hat das den zweiten Endpunkt dann fälschlich einem entfernteren, falschen
-Landing Point zugeschlagen, der zufällig noch "frei" war, statt korrekt im Vertex-Tier
-oder am selben (jetzt zweifach genutzten) Landing Point zu landen. Die 7
-`inferred_edge`-Fälle sind identisch geblieben (dieselben 3 Kabel, siehe unten) — dort
-ändert die Korrektur nichts, weil dort ohnehin kein Konkurrenzfall vorlag.
+The overall rate (99.8% clean) stays identical — but significantly more cases now
+correctly land in the vertex tier instead of incorrectly passing as an endpoint match.
+Reason: in the old algorithm, once a landing point was marked "taken," it could no
+longer be assigned to any further endpoint — for pass-through stations (two endpoints at
+the same location), that incorrectly assigned the second endpoint to a more distant,
+wrong landing point that happened to still be "free," instead of correctly landing in
+the vertex tier or at the same (now doubly-used) landing point. The 7 `inferred_edge`
+cases stayed identical (same 3 cables, see below) — the correction changes nothing there,
+since there was no contention case to begin with.
 
-**Stresstest, nicht ursprünglich angefordert:** `apcn-2` (Singapur–Japan-Trunk, 52
-Segmente) fiel beim ersten fehlerhaften Algorithmus mit 8 von 10 Landing Points komplett
-unmatched auf. Mit dem korrigierten Vertex-Tier: alle 8 matchen auf 0,0–1,4 km genau als
-innere Linienpunkte zweier langer Trunk-Segmente (Hongkong, Shantou, Busan, Taipeh etc.
-als echte Zwischenstationen). Ohne den Vertex-Tier wäre das ein sehr sichtbarer Fehler
-auf einem der größten Kabel im Datensatz gewesen — der beste Beleg, dass Tier 2 kein
-Nice-to-have ist.
+**Stress test, not originally requested:** `apcn-2` (Singapore–Japan trunk, 52 segments)
+came out with 8 of 10 landing points completely unmatched under the first, flawed
+algorithm. With the corrected vertex tier: all 8 match to within 0.0–1.4 km as interior
+line points of two long trunk segments (Hong Kong, Shantou, Busan, Taipei etc. as
+genuine intermediate stations). Without the vertex tier this would have been a highly
+visible error on one of the largest cables in the dataset — the best evidence that Tier
+2 is not a nice-to-have.
 
-**Die 7 `inferred_edge`-Fälle, unverändert gegenüber der ersten Zählung:**
+**The 7 `inferred_edge` cases, unchanged from the first count:**
 
-| Kabel | Landing Point |
+| Cable | Landing point |
 |---|---|
 | `america-movil-submarine-cable-system-1-amx-1` | `cancn-mexico` |
 | `eaufon-2` | `kangiqsujuaq-qc-canada` |
@@ -76,33 +76,32 @@ Nice-to-have ist.
 | `trans-global-cable-system-tgcs` | `manado-indonesia` |
 | `trans-global-cable-system-tgcs` | `surabaya-indonesia` |
 
-Nur 3 Kabel betroffen, alle mit plausibler Erklärung: `eaufon-2` und
-`trans-global-cable-system-tgcs` sind Multi-Landing-Point-Systeme mit vereinfachter
-öffentlicher Geometrie; `cancn-mexico` liegt vermutlich auf einer Stichleitung, die in
-der Geometrie nicht separat gezeichnet ist.
+Only 3 cables affected, all with a plausible explanation: `eaufon-2` and
+`trans-global-cable-system-tgcs` are multi-landing-point systems with simplified public
+geometry; `cancn-mexico` likely sits on a spur that isn't drawn separately in the
+geometry.
 
-Kein Kabel ist vollständig unmatched, keine fehlende Geometrie, keine fehlende
-Koordinate — bei 697 von 697 Kabeln bekommt jeder deklarierte Landing Point am Ende
-einen Platz im Graphen.
+No cable is entirely unmatched, no missing geometry, no missing coordinate — across 697
+of 697 cables, every declared landing point ends up with a place in the graph.
 
 ---
 
-## Mehrdeutigkeits-Check: durch das many-to-one-Matching strukturell gelöst
+## Ambiguity check: structurally resolved by many-to-one matching
 
-**Frage:** Liegen zwei deklarierte Landing Points *desselben* Kabels jemals innerhalb
-50 km voneinander? Dann könnte ein einzelner Match-Versuch einen Endpunkt der falschen
-von beiden zuordnen.
+**Question:** do two declared landing points of the *same* cable ever lie within 50 km
+of each other? If so, a single match attempt could assign an endpoint to the wrong one
+of the two.
 
-**Ergebnis: Ja, bei 210 von 697 Kabeln (30,1 %)** — häufiger als erwartet. Beispiele:
-`5-villages-6-islands` (13 mehrdeutige Paare), `au-aleutian` (8), `aqualink` (6),
-`aurora` (7), `2africa` (3), plus 205 weitere Kabel mit meist 1–2 Paaren.
+**Result: yes, for 210 of 697 cables (30.1%)** — more often than expected. Examples:
+`5-villages-6-islands` (13 ambiguous pairs), `au-aleutian` (8), `aqualink` (6), `aurora`
+(7), `2africa` (3), plus 205 more cables with mostly 1–2 pairs.
 
-**Gelöst, nicht nur eingeordnet.** Der in Runde 1 vorgeschlagene Fix — gieriges
-Matching, alle Kandidatenpaare nach Distanz sortiert, aufsteigend zugewiesen — ist jetzt
-Teil des korrigierten Algorithmus selbst (Tier 1) und wurde genau an den in der Review
-genannten Beispielen getestet:
+**Solved, not just scoped.** The fix proposed in round 1 — greedy matching, all
+candidate pairs sorted by distance, assigned ascending — is now part of the corrected
+algorithm itself (Tier 1) and was tested precisely against the examples named in the
+review:
 
-| Kabel | Deklariert | Tier 1 | Tier 2 | Tier 3 | Unmatched |
+| Cable | Declared | Tier 1 | Tier 2 | Tier 3 | Unmatched |
 |---|---|---|---|---|---|
 | `2africa` | 50 | 49 | 1 | 0 | 0 |
 | `5-villages-6-islands` | 9 | 8 | 1 | 0 | 0 |
@@ -110,18 +109,17 @@ genannten Beispielen getestet:
 | `aqualink` | 11 | 10 | 1 | 0 | 0 |
 | `aurora` | 12 | 12 | 0 | 0 | 0 |
 
-Für alle fünf: vollständige, eindeutige Zuordnung, keine offenen Fälle. Der frühere
-Rest-Risiko-Rahmen ("Beschriftungsrisiko, kein Genauigkeitsrisiko") war richtig
-eingeschätzt — mit dem korrigierten Algorithmus ist er jetzt behoben, nicht nur
-eingegrenzt.
+For all five: complete, unambiguous assignment, no open cases. The earlier residual-risk
+framing ("labeling risk, not an accuracy risk") was correctly judged — with the
+corrected algorithm it is now resolved, not just bounded.
 
 ---
 
-## Zusatzbefund: Country-Feld ist konsistent
+## Additional finding: the country field is consistent
 
-Nebenbei mitgeprüft, weil aus denselben Daten ableitbar: das `country`-Feld aus den
-Cable-Details ist für alle 1.922 Landing Points, die in mindestens einem Kabel
-auftauchen, **widerspruchsfrei** — keine zwei Kabel nennen für dieselbe
-`landing_point.id` unterschiedliche Länder. Das ist die Datengrundlage für die
-Country-Hub-Neufassung in Punkt 1 des Hauptdokuments; ohne diese Konsistenzprüfung wäre
-das Clustering pro Land nicht verlässlich gewesen.
+Checked in passing, since it's derivable from the same data: the `country` field from
+the cable details is **contradiction-free** for all 1,922 landing points that appear in
+at least one cable — no two cables state different countries for the same
+`landing_point.id`. This is the data foundation for the country-hub redefinition in
+Point 1 of the main document; without this consistency check, per-country clustering
+would not have been reliable.
