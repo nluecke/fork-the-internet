@@ -509,7 +509,7 @@ nicht spezifiziert — das ist Modell-Logik für Schritt 8 (Stufe 3), nicht Sche
 diesen Schritt. Was diese Entscheidung sicherstellt: das Artefakt liefert die
 **Referenzgröße** (`baseline_pair_path_count`), gegen die eine später gebaute Live-Query
 die Nach-Schnitt-Nutzung einer Kante verhältnismäßig setzen kann — exakt das, was die
-Formulierung *"das 3,2-fache ihres normalen Pfadanteils"* aus CLAUDE.md braucht.
+Formulierung *"das 3,2-fache ihres normalen Pfadanteils"* aus dem Projekt-Briefing braucht.
 **Offene Frage für Schritt 8, hier bewusst nicht entschieden:** ob die Live-Neuberechnung
 auf dem vollen Graphen läuft oder auf einen lokalen Radius um die gekappte Kante begrenzt
 wird, um jq-Performance zu sichern.
@@ -529,8 +529,8 @@ seinen günstigsten Zugang.
 > Kante läuft — nicht, wie viel tatsächlicher Datenverkehr über sie fließt. Ein
 > Länderpaar mit vernachlässigbarem Verkehr zählt genauso wie eines mit enormem
 > Volumen. Das ist ein Maß für strukturelle Wichtigkeit im Modell, kein Verkehrs- oder
-> Kapazitätswert — echte Verkehrsdaten pro Kabel liegen uns nicht vor (siehe Stufe 3 in
-> CLAUDE.md).
+> Kapazitätswert — echte Verkehrsdaten pro Kabel liegen uns nicht vor (siehe Stufe 3 im
+> Projekt-Briefing).
 
 **Neu — unerreichbare Länderpaare im Grundzustand, ins Artefakt aufgenommen.** Die
 Betweenness-Berechnung oben setzt voraus, dass zwischen zwei Ländern überhaupt ein Pfad
@@ -607,8 +607,8 @@ sind überholt:**
   Code-Kommentare in `scripts/build_graph.py`.
 - Diese Korrekturen sind eine echte Verbesserung der Modellgenauigkeit, keine
   Kompromisse an der Schema-Struktur (Punkte 1–8 bleiben unverändert) — reine
-  Generator-Bugfixes, wie in `CLAUDE.md` für Phase B vorgesehen ("falls der Build-Lauf
-  wieder einen neuen Fehler zeigt, einfach weiter debuggen").
+  Generator-Bugfixes, wie im Projekt-Briefing für Phase B vorgesehen ("falls der
+  Build-Lauf wieder einen neuen Fehler zeigt, einfach weiter debuggen").
 
 ---
 

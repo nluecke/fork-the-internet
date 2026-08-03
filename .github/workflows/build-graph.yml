@@ -3,7 +3,7 @@ name: Build topology graph
 on:
   schedule:
     # Weekly, Monday 03:00 UTC -- topology is slow, no need for more often
-    # (docs/decisions/003-graph-schema.md; CLAUDE.md "Kein Backend -- aber ein Build-Schritt")
+    # (docs/decisions/003-graph-schema.md, Prinzip "Kein Backend -- aber ein Build-Schritt")
     - cron: "0 3 * * 1"
   workflow_dispatch: {}
 
