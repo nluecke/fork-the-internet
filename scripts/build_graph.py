@@ -58,6 +58,78 @@ ATLAS_PAIRS = [
     ("India", "Singapore"), ("India", "Sweden"),
 ]
 
+# Historical event validation (Stage 4): real cable-cut incidents, modelled against
+# TODAY's topology to see whether the reachability model would have predicted the
+# real-world impact. Cable IDs, dates, and real_impact text are curated from
+# contemporaneous reporting (source URL per event) -- not fabricated, not fetched
+# live (these are settled historical facts, re-fetching them weekly would add
+# network I/O for data that never changes). See build_historical_events() for the
+# model-prediction side.
+HISTORICAL_EVENTS = [
+    {
+        "id": "red-sea-2024",
+        "name": "Red Sea cable cuts",
+        "date": "2024-02-24",
+        "cables": ["seacomtata-tgn-eurasia", "europe-india-gateway-eig", "asia-africa-europe-1-aae-1"],
+        "cause": (
+            "Widely attributed to the drifting, anchor-dragging MV Rubymar, a UK-owned "
+            "cargo ship disabled by a Houthi missile strike on 2024-02-18 that later "
+            "sank -- the leading theory, not confirmed fact."
+        ),
+        "real_impact": (
+            "Disrupted an estimated 25-70% of Europe-Asia traffic on some routes; "
+            "measurable degradation reported in East Africa (Tanzania, Kenya, Uganda, "
+            "Mozambique), the Middle East (UAE, Djibouti), and Southeast Asia (Vietnam) "
+            "-- a rerouting and congestion story, not a reported full blackout anywhere."
+        ),
+        "source": "https://www.kentik.com/blog/what-caused-the-red-sea-submarine-cable-cuts/",
+    },
+    {
+        "id": "west-africa-2024",
+        "name": "West Africa cable cuts",
+        "date": "2024-03-14",
+        "cables": ["west-africa-cable-system-wacs", "africa-coast-to-europe-ace", "sat-3wasc", "mainone"],
+        "cause": (
+            "Suspected undersea landslide in the canyon off Abidjan, Cote d'Ivoire; "
+            "MainOne's initial assessment pointed to seismic activity. Equiano landed "
+            "nearby but was not affected, and served as an alternate route."
+        ),
+        "real_impact": (
+            "13 West African countries affected per the Internet Society's outage "
+            "report. Cote d'Ivoire measured at roughly 4% of expected connectivity "
+            "(NetBlocks) despite Equiano remaining intact -- degraded, not fully cut "
+            "off, for Cote d'Ivoire specifically. Liberia, Benin, Ghana, and Burkina "
+            "Faso were also described as badly affected."
+        ),
+        "source": "https://www.internetsociety.org/resources/doc/2024/2024-west-africa-submarine-cable-outage-report/",
+    },
+    {
+        "id": "tonga-2022",
+        "name": "Tonga volcanic eruption",
+        "date": "2022-01-15",
+        "cables": ["tonga-cable", "tonga-domestic-cable-extension-tdce"],
+        "cause": (
+            "The Hunga Tonga-Hunga Ha'apai volcanic eruption severed both the "
+            "international cable to Fiji and the inter-island domestic extension in "
+            "the same event."
+        ),
+        "real_impact": (
+            "Near-total national internet blackout for 38 days -- the international "
+            "link was restored 2022-02-22. The domestic inter-island cable took far "
+            "longer: 18 months, restored 2023-07-12."
+        ),
+        "source": "https://blog.cloudflare.com/tonga-internet-outage",
+        "note": (
+            "Tonga's second international route -- the Hawaiki cable's Tu'i Vava'u "
+            "branch to Vava'u -- landed 2026-03-18 and went live 2026-05-26, well "
+            "after the 2022 eruption. This model reflects today's topology, so it may "
+            "show Tonga as still reachable through that new branch -- a resilience "
+            "gap the real 2022 blackout fell into that no longer exists today, not a "
+            "modelling error."
+        ),
+    },
+]
+
 SCHEMA_VERSION = "1.0.0"
 TELEGEOGRAPHY_LICENSE = "CC BY-SA 4.0"
 
@@ -854,6 +926,64 @@ def build_atlas_validation(latency_baseline, nodes, log=print):
 
 
 # --------------------------------------------------------------------------
+# Historical event validation (Stage 4)
+# --------------------------------------------------------------------------
+
+def build_historical_events(edges, cables, hubs_by_country, baseline_isolated_countries, log=print):
+    """For each entry in HISTORICAL_EVENTS, removes that event's real cable set from
+    today's topology and runs the same reachability BFS as Stage 1 to see which
+    countries the model would predict as fully isolated. Returned alongside the
+    curated real_impact text so the dashboard can show model vs. reality side by
+    side -- including the honest misses (see the Tonga note in HISTORICAL_EVENTS).
+    """
+    all_hubs = [(h, country) for country, hids in hubs_by_country.items() for h in hids]
+    baseline_isolated = set(baseline_isolated_countries)
+
+    results = []
+    for event in HISTORICAL_EVENTS:
+        cut_idx = set()
+        missing_cables = []
+        for cid in event["cables"]:
+            if cid not in cables:
+                missing_cables.append(cid)
+                continue
+            cut_idx.update(cables[cid]["edge_indices"])
+        if missing_cables:
+            log(f"  warning: event {event['id']} references unknown cable ids: {missing_cables}")
+
+        adj = collections.defaultdict(list)
+        for idx, e in enumerate(edges):
+            if idx in cut_idx:
+                continue
+            adj[e["from"]].append(e["to"])
+            adj[e["to"]].append(e["from"])
+
+        seed = next(h for h, c in all_hubs if c not in baseline_isolated)
+        reached = {seed}
+        frontier = [seed]
+        while frontier:
+            nxt = []
+            for u in frontier:
+                for v in adj[u]:
+                    if v not in reached:
+                        reached.add(v)
+                        nxt.append(v)
+            frontier = nxt
+
+        newly_isolated = sorted({
+            c for h, c in all_hubs
+            if c not in baseline_isolated and h not in reached
+        })
+
+        entry = {k: v for k, v in event.items()}
+        entry["model_predicted_isolated_countries"] = newly_isolated
+        entry["model_cut_edge_count"] = len(cut_idx)
+        results.append(entry)
+
+    return results
+
+
+# --------------------------------------------------------------------------
 # Assembly
 # --------------------------------------------------------------------------
 
@@ -1003,6 +1133,9 @@ def build_artifact(log=print):
     log("fetching RIPE Atlas validation layer (curated country pairs)...")
     atlas_validation = build_atlas_validation(latency_baseline, nodes, log=log)
 
+    log("computing historical event validation (Stage 4)...")
+    historical_events = build_historical_events(edges, cables, hubs_by_country, isolated_countries, log=log)
+
     artifact = {
         "schema_version": SCHEMA_VERSION,
         "generated_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -1042,6 +1175,7 @@ def build_artifact(log=print):
         "latency_cable_index": latency_cable_index,
         "latency_baseline": latency_baseline,
         "atlas_validation": atlas_validation,
+        "historical_events": historical_events,
     }
     return artifact
 
