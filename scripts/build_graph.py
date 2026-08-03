@@ -10,6 +10,7 @@ Run: python3 scripts/build_graph.py
 
 import json
 import math
+import re
 import sys
 import time
 import heapq
@@ -469,22 +470,37 @@ def build_landmass_groups(by_country, force_same_landmass, accepted_separate):
 # Terrestrial edges (003, Point 2)
 # --------------------------------------------------------------------------
 
+def slugify(s):
+    return re.sub(r"[^a-z0-9]+", "-", s.lower()).strip("-")
+
+
 def build_terrestrial_edges(final_groups):
     """Returns (edges, hubs, warnings).
 
     edges: list of dicts (MST within each group + one hub-attach edge).
     hubs: list of dicts {id, country, lon, lat, member_count}.
     warnings: high_intra_group_latency entries (003, Point 2).
+
+    Hub IDs are `hub__<country-slug>` for the common single-hub case, or
+    `hub__<country-slug>__<n>` for the handful of countries with more than one
+    landmass group (n assigned by sorting groups on their lexicographically
+    smallest member landing-point ID -- itself a stable, content-derived string,
+    never insertion/iteration order). A plain incrementing counter here would
+    violate 003, Point 7's own stability rule the moment `final_groups`' iteration
+    order shifts between builds (e.g. from upstream landing-point ordering changes)
+    -- and country/from/to scenario variables built on top of hub IDs (Stage 2)
+    make that concretely URL-breaking, not just cosmetic.
     """
     edges = []
     hubs = []
     warnings = []
-    hub_counter = 0
 
     for country, groups in final_groups.items():
-        for group in groups:
-            hub_counter += 1
-            hub_id = f"hub__{hub_counter}"
+        country_slug = slugify(country)
+        ordered_groups = sorted(groups, key=lambda g: min(p[0] for p in g))
+        multi = len(ordered_groups) > 1
+        for group_idx, group in enumerate(ordered_groups):
+            hub_id = f"hub__{country_slug}__{group_idx}" if multi else f"hub__{country_slug}"
             n = len(group)
             clon, clat = spherical_centroid(group)
             hubs.append({"id": hub_id, "country": country, "lon": round(clon, 4), "lat": round(clat, 4), "member_count": n})
@@ -621,6 +637,53 @@ def compute_baseline_and_unreachable(nodes_adj, hubs_by_country):
     ]
 
     return baseline_count, unreachable, total_pairs, isolated_countries
+
+
+# --------------------------------------------------------------------------
+# Stage 2 latency baseline (precomputed shortest-path latency per hub pair)
+# --------------------------------------------------------------------------
+
+def compute_latency_baseline(nodes_adj, edges, hubs, cable_ids_sorted):
+    """Shortest-path latency between every country-hub pair, plus the set of cables
+    that path traverses -- precomputed here, not live in the browser.
+
+    A live Dijkstra in jq (no priority queue, label-correcting relaxation instead)
+    was measured at 60-110 rounds and 4-5s wall time for a single hub pair on this
+    graph, because global cable topology has a short hop diameter but the lack of a
+    proper priority queue means most of the ~2,100 nodes still get touched before the
+    target settles. Precomputing here (189 Dijkstra runs, ~1s total) and shipping a
+    keyed lookup lets the dashboard resolve "baseline latency for this pair" and
+    "does this cut touch that pair's shortest path" in O(1), no live computation for
+    the ~99% of (pair, cut) combinations where the answer is "unchanged".
+
+    Cable references are stored as indices into `cable_ids_sorted` (returned
+    alongside as `latency_cable_index`), not cable-id strings, since the same ~7
+    cables repeat across thousands of pairs -- cuts the artifact's gzip size roughly
+    in half versus inlining the id strings.
+    """
+    cable_index = {cid: i for i, cid in enumerate(cable_ids_sorted)}
+    hub_ids = sorted(h["id"] for h in hubs)
+    baseline = {}
+    for src in hub_ids:
+        dist, prev = dijkstra(nodes_adj, src)
+        for dst in hub_ids:
+            if dst <= src:
+                continue
+            d = dist.get(dst)
+            if d is None:
+                continue
+            cables_used = []
+            seen = set()
+            node = dst
+            while node in prev:
+                parent, edge_key = prev[node]
+                cid = edges[edge_key].get("cable_id")
+                if cid is not None and cid not in seen:
+                    seen.add(cid)
+                    cables_used.append(cable_index[cid])
+                node = parent
+            baseline[f"{src}|{dst}"] = [round(d, 2), cables_used]
+    return baseline
 
 
 # --------------------------------------------------------------------------
@@ -766,6 +829,10 @@ def build_artifact(log=print):
     for idx, e in enumerate(edges):
         e["baseline_pair_path_count"] = baseline_count.get(idx, 0)
 
+    log("computing Stage 2 latency baseline (per hub-pair shortest path)...")
+    latency_cable_index = sorted(cables.keys())
+    latency_baseline = compute_latency_baseline(nodes_adj, edges, hubs, latency_cable_index)
+
     artifact = {
         "schema_version": SCHEMA_VERSION,
         "generated_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -802,6 +869,8 @@ def build_artifact(log=print):
         "adjacency": adjacency,
         "edge_index": edge_index,
         "cables": cables,
+        "latency_cable_index": latency_cable_index,
+        "latency_baseline": latency_baseline,
     }
     return artifact
 
