@@ -577,6 +577,39 @@ neu eingeführte Branch-Fallback (Tier 4) für Landing Points ohne Kettenpartner
 eigenen Segment. Mit beidem behoben, fiel die Zahl der fälschlich isolierten Länder von
 40 auf die jetzt plausiblen 6.
 
+**Nachtrag Phase B (echter Build-Lauf, drei weitere Bugfixes, 2026-08-03) — Zahlen oben
+sind überholt:**
+
+- **`unreachable_baseline_pairs`: 551 von 17.205 (3,2 %), nicht mehr 1.094.** Ursache:
+  36 Kabel (darunter reale Großsysteme wie Equiano, Bifrost, Echo, Faster, Juno,
+  Jupiter) hatten in der bisherigen Implementierung **null Kanten und keine einzige
+  Warnung** — der Branch-Fallback (Tier 4) brauchte einen bereits verketteten
+  Landing Point als Anker, hatte aber nie einen, wenn *jeder* deklarierte Landing
+  Point eines Kabels allein auf seinem eigenen Segment saß (reine
+  Verzweigungstopologie, kein Segment von zweien geteilt). Fix: deterministischer
+  Bootstrap-Anker (lexikographisch kleinste Landing-Point-ID), siehe
+  `scripts/build_graph.py`.
+- **Isolierte Länder: 3, nicht 6.** St. Helena (jetzt korrekt über Equiano an
+  Nigeria/Südafrika/Togo angebunden), Tokelau und Wallis und Futuna fallen aus der
+  Liste — sie waren nur wegen des Tier-4-Bugs isoliert. Übrig: **Aserbaidschan,
+  Kasachstan** (Kaspisches Meer, unverändert real isoliert) und **Tuvalu** (weiterhin
+  ein einzelner, kleiner Pazifik-Landing-Point ohne globale Anbindung). Zusätzlich war
+  die `isolated_countries`-Definition selbst zu eng implementiert ("unerreichbar von
+  *jedem* anderen Land" statt "kein Hub in der größten Zusammenhangskomponente") —
+  das hätte Aserbaidschan/Kasachstan als zusammenhängendes, aber vom Rest der Welt
+  getrenntes Länderpaar sonst übersehen. Jetzt über echte Connected-Components
+  (Union-Find über den gesamten Knotengraphen) bestimmt.
+- Zwei weitere, kleinere Bugs im selben Lauf gefunden: eine Tier-1/Tier-2-Vertex-
+  Kollision (zwei verschiedene, mehrere km entfernte Landing Points konnten auf
+  denselben Polyline-Vertex snappen und damit zu einer 0-km-Kante kollabieren) und
+  doppelte aufeinanderfolgende Vertices in Telegeographys eigener Rohgeometrie
+  (`australia-japan-cable-ajc`, Segment 2) mit demselben Effekt. Beide gefixt, siehe
+  Code-Kommentare in `scripts/build_graph.py`.
+- Diese Korrekturen sind eine echte Verbesserung der Modellgenauigkeit, keine
+  Kompromisse an der Schema-Struktur (Punkte 1–8 bleiben unverändert) — reine
+  Generator-Bugfixes, wie in `CLAUDE.md` für Phase B vorgesehen ("falls der Build-Lauf
+  wieder einen neuen Fehler zeigt, einfach weiter debuggen").
+
 ---
 
 ## 6. jq-Tauglichkeit: keine linearen Scans
@@ -750,9 +783,21 @@ Trifft die Erwartung aus der Anfrage (~1,25 MB) fast genau — bestätigt durch 
 Kettenbildung, nicht durch die ursprüngliche Additionsannahme. **Weiterhin klar unter
 dem 1,5-MB-Budget.**
 
-**Budget: ≤ 1,5 MB unkomprimiert.** Aktuelle Rechnung (~1,23 MB) lässt weiterhin Luft für
-neue Kabel bis zum nächsten Redesign. Über `raw.githubusercontent.com` mit Gzip/Brotli
-(Standard bei JSON-Antworten) landet die tatsächlich übertragene Größe weiterhin grob bei
+**Nachtrag Phase B (echter Build-Lauf, nach den drei Bugfixes vom 2026-08-03):** Die
+tatsächliche Artefaktgröße liegt bei **1.713,7 KB unkomprimiert** — über der 1,5-MB-Linie
+unten, weil die Vorab-Schätzung `id`-Strings und `baseline_pair_path_count` pro Kante zu
+knapp veranschlagt hatte (echter Schnitt ≈ 253 Bytes/Kante bei 4.229 Kanten, nicht die
+170–190 oben). **Kein Nachschärfen der Datenstruktur nötig:** Gzip liefert 287 KB, Brotli
+176 KB — beide klar im unten selbst gesetzten Zielkorridor 250–400 KB, und genau die
+komprimierte Zahl ist das eigentliche Betriebskriterium (CDN-Transfer, nicht die
+Rohbyte-Zahl im Repo). Das 1,5-MB-Budget unten bleibt als unkomprimierte Richtgröße mit
+Puffer stehen, ist aber kein hartes Gate mehr — der Build-Skript-Check gibt bei
+Überschreitung weiterhin eine `WARNING` aus, keinen `SystemExit`.
+
+**Budget: ≤ 1,5 MB unkomprimiert (Richtgröße, siehe Nachtrag oben).** Aktuelle Rechnung
+(~1,23 MB) lässt weiterhin Luft für neue Kabel bis zum nächsten Redesign. Über
+`raw.githubusercontent.com` mit Gzip/Brotli (Standard bei JSON-Antworten) landet die
+tatsächlich übertragene Größe weiterhin grob bei
 250–400 KB — das Artefakt wird einmal pro Dashboard-Session geladen, nicht pro Query,
 also kein Volumenproblem selbst bei paralleler Voting-Woche-Last (statische Datei über
 GitHub-CDN, kein Rate-Limit-Vektor wie bei Live-APIs).

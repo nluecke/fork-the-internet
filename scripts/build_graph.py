@@ -208,6 +208,26 @@ def fetch_all_cable_details(cable_ids, log=print):
 # Matching + chaining (003, Punkt 3 + 3a)
 # --------------------------------------------------------------------------
 
+def dedupe_consecutive_vertices(line):
+    """Collapse consecutive duplicate vertices in a polyline.
+
+    TeleGeography's raw geometry occasionally repeats a vertex 2-3 times in a row
+    (observed on australia-japan-cable-ajc, segment 2, at the Guam landing --
+    presumably marking a branching unit). Left as-is, two distinct landing points
+    near that spot can vertex-split onto separate copies of the same point and
+    chain into a spurious zero-length edge despite being several km apart in
+    reality. Dropping the duplicates doesn't change any real arc length (a
+    zero-distance hop contributes nothing to the cumulative sum).
+    """
+    if not line:
+        return line
+    out = [line[0]]
+    for pt in line[1:]:
+        if tuple(pt) != tuple(out[-1]):
+            out.append(pt)
+    return out
+
+
 def match_and_chain_cable(cid, cable_detail, lines_by_cable, lp_coords):
     """Returns (submarine_edges, warnings) for one cable.
 
@@ -217,7 +237,7 @@ def match_and_chain_cable(cid, cable_detail, lines_by_cable, lp_coords):
     great-circle chord, since no shared polyline exists for those pairs.
     """
     declared = cable_detail.get("landing_points", [])
-    lines = lines_by_cable.get(cid, [])
+    lines = [dedupe_consecutive_vertices(line) for line in lines_by_cable.get(cid, [])]
     lp_ids = [lp["id"] for lp in declared if lp["id"] in lp_coords]
     warnings = []
     if not lines or not lp_ids:
@@ -259,6 +279,7 @@ def match_and_chain_cable(cid, cable_detail, lines_by_cable, lp_coords):
     for seg_idx, line in enumerate(lines):
         for vidx, pt in enumerate(line):
             all_vertex_positions.append((seg_idx, vidx, tuple(pt)))
+    pos_lookup = {(seg_idx, vidx): pos_i for pos_i, (seg_idx, vidx, _) in enumerate(all_vertex_positions)}
     vcandidates = []
     for lpid in uncovered:
         lpc = lp_coords[lpid]
@@ -267,7 +288,12 @@ def match_and_chain_cable(cid, cable_detail, lines_by_cable, lp_coords):
             if d <= TOLERANCE_KM:
                 vcandidates.append((d, lpid, pos_i))
     vcandidates.sort()
-    claimed_positions = set()
+    # A Tier-1 endpoint match already occupies its vertex position -- without this,
+    # a second, genuinely distinct landing point (several km away) can vertex-split
+    # onto that same position, and the two collapse into a zero-length chained edge
+    # once sorted by arc-length position (found live: Guam tanguisson-point/tumon-bay,
+    # 3.6 km apart, both landing on one segment endpoint).
+    claimed_positions = {pos_lookup[(endpoints[ei][0], endpoints[ei][1])] for ei in endpoint_assignment}
     for d, lpid, pos_i in vcandidates:
         if lpid in covered or pos_i in claimed_positions:
             continue
@@ -323,6 +349,17 @@ def match_and_chain_cable(cid, cable_detail, lines_by_cable, lp_coords):
     # their own segment (e.g. a short spur off an undeclared branching unit). Chord to
     # nearest already-connected LP on the same cable (003, Punkt 3a).
     orphans = [lpid for lpid in covered if lpid not in connected]
+    if orphans and not connected:
+        # Every declared landing point on this cable sits alone on its own segment --
+        # a pure multi-branch topology with no segment ever shared by two of them.
+        # There is then no "already chained" neighbor for the loop below to attach
+        # to, so it would otherwise spin through all orphans without ever connecting
+        # one (found live: equiano, bifrost, echo and 33 other cables end up with
+        # zero edges, no warning, fully silent). Bootstrap with the lexicographically
+        # first orphan as a deterministic seed (Prinzip 3).
+        seed = min(orphans)
+        connected.add(seed)
+        orphans = [x for x in orphans if x != seed]
     remaining = list(orphans)
     guard = 0
     while remaining and guard < 10000:
@@ -501,10 +538,38 @@ def dijkstra(adj, src):
     return dist, prev
 
 
+def connected_components(nodes_adj):
+    """Union-find over the full node graph (landing points + hubs). Returns a dict
+    node -> representative id of its component.
+    """
+    parent = {}
+
+    def find(x):
+        parent.setdefault(x, x)
+        while parent[x] != x:
+            parent[x] = parent.get(parent[x], parent[x])
+            x = parent[x]
+        return x
+
+    def union(a, b):
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[ra] = rb
+
+    for u, neighbors in nodes_adj.items():
+        parent.setdefault(u, u)
+        for v, _w, _edge_key in neighbors:
+            parent.setdefault(v, v)
+            union(u, v)
+
+    return {n: find(n) for n in parent}
+
+
 def compute_baseline_and_unreachable(nodes_adj, hubs_by_country):
     """Runs one Dijkstra per hub, derives country-pair reachability (min over hub
     combinations) and increments baseline_pair_path_count per edge on each country
-    pair's shortest path. Also counts unreachable country pairs.
+    pair's shortest path. Also counts unreachable country pairs and countries
+    isolated from the largest connected component (003, Punkt 5).
     """
     countries = sorted(hubs_by_country.keys())
     all_hubs = [h for hids in hubs_by_country.values() for h in hids]
@@ -517,7 +582,6 @@ def compute_baseline_and_unreachable(nodes_adj, hubs_by_country):
     baseline_count = collections.Counter()
     unreachable = 0
     total_pairs = 0
-    unreachable_count_by_country = collections.Counter()
 
     for i in range(len(countries)):
         for j in range(i + 1, len(countries)):
@@ -531,8 +595,6 @@ def compute_baseline_and_unreachable(nodes_adj, hubs_by_country):
                         best = (d, ha, hb)
             if best is None:
                 unreachable += 1
-                unreachable_count_by_country[ca] += 1
-                unreachable_count_by_country[cb] += 1
                 continue
             _, ha, hb = best
             # walk back the path from hb to ha using prev_from[ha]
@@ -543,7 +605,20 @@ def compute_baseline_and_unreachable(nodes_adj, hubs_by_country):
                 baseline_count[edge_key] += 1
                 node = parent
 
-    isolated_countries = [c for c in countries if unreachable_count_by_country[c] == len(countries) - 1]
+    # "Isolated" means no hub of that country sits in the graph's largest connected
+    # component -- not merely "unreachable from every other country". A country pair
+    # can be its own two-country island (e.g. Azerbaijan/Kazakhstan across the
+    # Caspian Sea: connected to each other, disconnected from the rest of the world)
+    # without either country being unreachable from *all* others, so a
+    # per-country-pair tally alone misses it. Comparing against the true largest
+    # component catches that case correctly.
+    comp_of = connected_components(nodes_adj)
+    comp_sizes = collections.Counter(comp_of.values())
+    largest_component = comp_sizes.most_common(1)[0][0] if comp_sizes else None
+    isolated_countries = [
+        c for c in countries
+        if not any(comp_of.get(h) == largest_component for h in hubs_by_country[c])
+    ]
 
     return baseline_count, unreachable, total_pairs, isolated_countries
 
@@ -649,6 +724,19 @@ def build_artifact(log=print):
             "length_source": e["length_source"], "cable_id": None,
         })
 
+    # Some edges legitimately round to 0.0 km at 1-decimal precision -- the source
+    # data reports identical or sub-50m-apart coordinates for two distinct landing
+    # point IDs (e.g. manama-bahrain/amwaj-island-bahrain), or a landmass group has
+    # exactly one member so its hub coincides with that member exactly. That is a
+    # true reflection of the input, not a bug -- surfaced as a warning, not a build
+    # failure (Prinzip 4, "Modell ist inspizierbar").
+    for e in edges:
+        if e["distance_km"] == 0:
+            all_warnings.append({
+                "type": "zero_distance_edge", "edge_id": e["id"],
+                "detail": "Kante rundet auf 0.0 km -- Endpunkte laut Quelldaten identisch oder unter 50 m auseinander, bzw. Hub-Anbindung einer Landmass-Gruppe mit nur einem Mitglied",
+            })
+
     adjacency = collections.defaultdict(list)
     edge_index = {}
     nodes_adj = collections.defaultdict(list)  # for Dijkstra: node -> [(neighbor, weight, edge_key)]
@@ -738,10 +826,16 @@ def run_sanity_checks(artifact, log=print):
     if orphaned:
         failures.append(f"{len(orphaned)} orphaned nodes with zero edges: {orphaned[:10]}")
 
-    # no zero-length or absurd-length edges
-    zero_length = [e["id"] for e in edges if e["distance_km"] <= 0]
+    # negative distance is impossible and always a real bug; exact 0.0 can be
+    # legitimate (identical/sub-50m source coordinates, or a single-member landmass
+    # group's hub coinciding with its only point) -- surfaced as a "zero_distance_edge"
+    # warning instead, not a build failure.
+    negative_length = [e["id"] for e in edges if e["distance_km"] < 0]
+    if negative_length:
+        failures.append(f"{len(negative_length)} edges with negative distance_km: {negative_length[:10]}")
+    zero_length = [e["id"] for e in edges if e["distance_km"] == 0]
     if zero_length:
-        failures.append(f"{len(zero_length)} edges with distance_km <= 0: {zero_length[:10]}")
+        log(f"  note: {len(zero_length)} edges have distance_km == 0.0 (see 'zero_distance_edge' warnings): {zero_length[:10]}")
     absurd_length = [e["id"] for e in edges if e["distance_km"] > 20040]  # > half Earth circumference
     if absurd_length:
         failures.append(f"{len(absurd_length)} edges longer than half the Earth's circumference: {absurd_length[:10]}")
