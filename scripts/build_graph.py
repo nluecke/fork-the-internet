@@ -34,6 +34,30 @@ HIGH_LATENCY_WARNING_MS = 30.0
 ARTIFACT_BUDGET_KB = 1536  # 1.5 MB, docs/decisions/003-graph-schema.md
 SANITY_MAX_ISOLATED_COUNTRIES = 10
 
+# RIPE Atlas validation layer (Stage 2): a curated set of real anchor-mesh ping
+# results, compared against the modelled physics-only latency_baseline. Curated,
+# not exhaustive -- see build_atlas_validation() docstring for why.
+RIPE_ATLAS_API = "https://atlas.ripe.net/api/v2"
+ATLAS_COUNTRY_ISO = {
+    "United States": "US", "Japan": "JP", "Germany": "DE", "Brazil": "BR",
+    "Australia": "AU", "South Africa": "ZA", "India": "IN", "Singapore": "SG",
+    "United Kingdom": "GB", "France": "FR", "Chile": "CL", "Spain": "ES",
+    "New Zealand": "NZ", "Kenya": "KE", "Nigeria": "NG", "Sweden": "SE",
+}
+# The "first active anchor found per country" heuristic below picks a US anchor in
+# Guam by default (technically US-coded, geographically nowhere near representative
+# of "United States" -- inflated every US pair by 100+ ms in a live check). Override
+# to a mainland hub instead. No other country in the curated set needed this.
+ATLAS_ANCHOR_OVERRIDE = {"US": 1838}  # Ashburn, VA
+ATLAS_PAIRS = [
+    ("United States", "Japan"), ("United States", "Germany"), ("United States", "Brazil"),
+    ("United States", "United Kingdom"), ("Japan", "Australia"), ("Japan", "Singapore"),
+    ("Germany", "France"), ("Germany", "South Africa"), ("Germany", "India"),
+    ("Brazil", "Chile"), ("Brazil", "Spain"), ("Australia", "New Zealand"),
+    ("Australia", "Singapore"), ("South Africa", "Kenya"), ("South Africa", "Nigeria"),
+    ("India", "Singapore"), ("India", "Sweden"),
+]
+
 SCHEMA_VERSION = "1.0.0"
 TELEGEOGRAPHY_LICENSE = "CC BY-SA 4.0"
 
@@ -687,6 +711,149 @@ def compute_latency_baseline(nodes_adj, edges, hubs, cable_ids_sorted):
 
 
 # --------------------------------------------------------------------------
+# RIPE Atlas validation layer (Stage 2)
+# --------------------------------------------------------------------------
+
+def fetch_atlas_active_anchors(iso_codes, log=print):
+    """Returns {iso: anchor_record} for the first active (non-disabled, not
+    decommissioned) anchor found per requested country, then applies
+    ATLAS_ANCHOR_OVERRIDE. Scans the full anchor list once (~1769 entries,
+    paginated) rather than filtering server-side per country -- cheaper than
+    16 separate requests and the set of countries we need is fixed and small.
+    """
+    wanted = set(iso_codes)
+    found = {}
+    url = f"{RIPE_ATLAS_API}/anchors/?page_size=500"
+    while url and wanted - found.keys():
+        d = fetch_json(url, timeout=25)
+        for a in d["results"]:
+            if a["is_disabled"] or a["date_decommissioned"]:
+                continue
+            cc = a["country"]
+            if cc in wanted and cc not in found:
+                found[cc] = a
+        url = d.get("next")
+    for iso, anchor_id in ATLAS_ANCHOR_OVERRIDE.items():
+        if iso in wanted:
+            found[iso] = fetch_json(f"{RIPE_ATLAS_API}/anchors/{anchor_id}/", timeout=15)
+    missing = wanted - found.keys()
+    if missing:
+        log(f"  warning: no active RIPE Atlas anchor found for: {sorted(missing)}")
+    return found
+
+
+def fetch_atlas_mesh_measurement_ids(anchor_ids, log=print):
+    """Returns {anchor_id: mesh_ping_measurement_id} for the given anchor IDs.
+
+    The anchor-measurements list endpoint's query-string filters (target=,
+    target_id=, type=, is_mesh=) are silently ignored by the API -- every
+    combination tried returns the same unfiltered 12,743-row list starting at
+    anchor 937. Confirmed live, not assumed. Works around it by paginating the
+    full unfiltered list once (page_size=500, ~26 pages) and filtering
+    client-side; stops early once every requested anchor has been found.
+    """
+    remaining = set(anchor_ids)
+    result = {}
+    url = f"{RIPE_ATLAS_API}/anchor-measurements/?page_size=500"
+    while url and remaining:
+        d = fetch_json(url, timeout=25)
+        for r in d["results"]:
+            if r["type"] != "ping" or not r["is_mesh"]:
+                continue
+            aid = int(r["target"].rstrip("/").split("/")[-1])
+            if aid in remaining:
+                result[aid] = r["measurement"].rstrip("/").split("/")[-1]
+                remaining.discard(aid)
+        url = d.get("next")
+    if remaining:
+        log(f"  warning: no mesh ping measurement found for anchor ids: {sorted(remaining)}")
+    return result
+
+
+def build_atlas_validation(latency_baseline, nodes, log=print):
+    """Real measured RTT (RIPE Atlas anchor mesh, live) vs. modelled
+    latency_baseline for a curated set of country pairs (ATLAS_PAIRS).
+
+    Curated, not all 17,206 baseline pairs, for the same reason latency itself
+    is precomputed rather than live: this is real network I/O (anchor list,
+    mesh-measurement-id scan, one `latest` fetch per target anchor -- roughly
+    10 MB total for 16 countries), not something to run per visitor or scale to
+    thousands of pairs in a weekly build without a real justification. 16
+    countries with an active RIPE Atlas anchor, chosen for geographic spread;
+    17 pairs between them. Where a pair's forward mesh has no result (anchor
+    meshes cover ~30-40% of all other anchors, not all of them), the reverse
+    direction is tried before giving up on that pair -- RTT is symmetric enough
+    for this purpose.
+    """
+    country_to_hub = {}
+    for hid, node in nodes.items():
+        if node.get("type") == "country_hub":
+            country_to_hub.setdefault(node["country"], hid)
+
+    countries = {c for pair in ATLAS_PAIRS for c in pair}
+    isos = {ATLAS_COUNTRY_ISO[c] for c in countries}
+    log(f"  fetching active RIPE Atlas anchors for {len(isos)} countries...")
+    anchors = fetch_atlas_active_anchors(isos, log=log)
+
+    anchor_ids = {a["id"] for a in anchors.values()}
+    log(f"  scanning anchor-measurements for {len(anchor_ids)} mesh ping ids...")
+    target_to_msm = fetch_atlas_mesh_measurement_ids(anchor_ids, log=log)
+
+    mesh_cache = {}
+
+    def mesh_results(anchor_id):
+        if anchor_id not in mesh_cache:
+            msm_id = target_to_msm.get(anchor_id)
+            if msm_id is None:
+                mesh_cache[anchor_id] = {}
+            else:
+                latest = fetch_json(f"{RIPE_ATLAS_API}/measurements/{msm_id}/latest/", timeout=25)
+                mesh_cache[anchor_id] = {
+                    r["prb_id"]: r for r in latest if isinstance(r, dict) and "prb_id" in r
+                }
+            time.sleep(0.3)
+        return mesh_cache[anchor_id]
+
+    validation = []
+    for a, b in ATLAS_PAIRS:
+        a_iso, b_iso = ATLAS_COUNTRY_ISO[a], ATLAS_COUNTRY_ISO[b]
+        a_anchor, b_anchor = anchors.get(a_iso), anchors.get(b_iso)
+        if not a_anchor or not b_anchor:
+            continue
+
+        measured = None
+        msm_used = None
+        # try b as target (a's probe pinging into b's mesh), then the reverse
+        for target_anchor, source_anchor in ((b_anchor, a_anchor), (a_anchor, b_anchor)):
+            by_probe = mesh_results(target_anchor["id"])
+            r = by_probe.get(source_anchor["probe"])
+            if r and r.get("avg", 0) > 0:
+                measured = round(r["avg"], 2)
+                msm_used = target_to_msm.get(target_anchor["id"])
+                break
+        if measured is None:
+            log(f"  no RIPE Atlas result for {a} <-> {b}, skipping")
+            continue
+
+        ha, hb = country_to_hub.get(a), country_to_hub.get(b)
+        key = "|".join(sorted([ha, hb])) if ha and hb else None
+        entry = latency_baseline.get(key) if key else None
+        if entry is None:
+            log(f"  no modelled baseline for {a} <-> {b}, skipping")
+            continue
+
+        validation.append({
+            "country_a": a, "country_b": b,
+            "measured_rtt_ms": measured,
+            "modelled_latency_ms": entry[0],
+            "ratio": round(measured / entry[0], 2) if entry[0] else None,
+            "atlas_measurement_id": int(msm_used) if msm_used else None,
+        })
+
+    return validation
+
+
+# --------------------------------------------------------------------------
 # Assembly
 # --------------------------------------------------------------------------
 
@@ -833,6 +1000,9 @@ def build_artifact(log=print):
     latency_cable_index = sorted(cables.keys())
     latency_baseline = compute_latency_baseline(nodes_adj, edges, hubs, latency_cable_index)
 
+    log("fetching RIPE Atlas validation layer (curated country pairs)...")
+    atlas_validation = build_atlas_validation(latency_baseline, nodes, log=log)
+
     artifact = {
         "schema_version": SCHEMA_VERSION,
         "generated_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -871,6 +1041,7 @@ def build_artifact(log=print):
         "cables": cables,
         "latency_cable_index": latency_cable_index,
         "latency_baseline": latency_baseline,
+        "atlas_validation": atlas_validation,
     }
     return artifact
 
