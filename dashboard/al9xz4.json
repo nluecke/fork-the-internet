@@ -1,0 +1,1311 @@
+{
+  "apiVersion": "dashboard.grafana.app/v2beta1",
+  "kind": "Dashboard",
+  "metadata": {
+    "annotations": {
+      "grafana.app/folder": "afu1p0xx1qnswb"
+    },
+    "name": "al9xz4"
+  },
+  "spec": {
+    "annotations": [
+      {
+        "kind": "AnnotationQuery",
+        "spec": {
+          "builtIn": true,
+          "enable": true,
+          "hide": true,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "legacyOptions": {
+            "type": "dashboard"
+          },
+          "name": "Annotations & Alerts",
+          "query": {
+            "datasource": {
+              "name": "-- Grafana --"
+            },
+            "group": "grafana",
+            "kind": "DataQuery",
+            "spec": {},
+            "version": "v0"
+          }
+        }
+      }
+    ],
+    "cursorSync": "Off",
+    "editable": true,
+    "elements": {
+      "panel-1": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "bfu1ozm3b87pcf"
+                      },
+                      "group": "yesoreyeram-infinity-datasource",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "columns": [],
+                        "format": "table",
+                        "parser": "jq-backend",
+                        "root_selector": "\"${cut_cable}\" as $cutval\n| . as $graph\n| ($graph.isolated_countries // []) as $baseline_isolated\n| ($graph.cables[$cutval].edge_indices // [] | map({(tostring): true}) | add // {}) as $cutset\n| [$graph.edges | to_entries[] | select(($cutset[(.key|tostring)] // false) | not) | .value] as $alive_edges\n| (reduce $alive_edges[] as $e ({}; .[$e.from] += [$e.to] | .[$e.to] += [$e.from])) as $adj\n| ([$graph.nodes | to_entries[]\n     | select(.value.type==\"country_hub\")\n     | select((.value.country) as $c | ($baseline_isolated | index($c)) == null)\n   ][0].key) as $seed\n| ( {visited: {($seed): true}, frontier: [$seed]}\n    | until(.frontier == [];\n        (.frontier | map($adj[.] // []) | add // []) as $cands\n        | .visited as $v\n        | ([$cands[] | select(($v[.] // false) | not)] | unique) as $new\n        | .visited = ($v + ([$new[] | {(.): true}] | add // {}))\n        | .frontier = $new\n      )\n    | .visited\n  ) as $reached\n| $graph.nodes | to_entries[]\n    | select(.value.type==\"country_hub\")\n    | select(($reached[.key] // false) | not)\n    | select((.value.country) as $c | ($baseline_isolated | index($c)) == null)\n    | { Country: .value.country, Hub_ID: .key }",
+                        "source": "url",
+                        "type": "json",
+                        "url": "https://raw.githubusercontent.com/nluecke/fork-the-internet/main/data/graph.json",
+                        "url_options": {
+                          "method": "GET"
+                        }
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "description": "Countries that lose every path to the main component after this cable cut. Countries already isolated at baseline (Azerbaijan, Kazakhstan, Tuvalu) are excluded, since they are isolated regardless of the scenario.",
+          "id": 1,
+          "links": [],
+          "title": "Total outage after cutting: $cut_cable",
+          "vizConfig": {
+            "group": "table",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              },
+              "options": {}
+            },
+            "version": ""
+          }
+        }
+      },
+      "panel-10": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "bfu1ozm3b87pcf"
+                      },
+                      "group": "yesoreyeram-infinity-datasource",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "columns": [],
+                        "format": "table",
+                        "parser": "jq-backend",
+                        "root_selector": "\"${historical_event}\" as $eid\n| . as $graph\n| (\n    if $eid == \"\" then\n      [{ Row: \"Pick an event above\", Details: \"\" }]\n    else\n      ($graph.historical_events[] | select(.id == $eid)) as $ev\n      | [\n          { Row: \"Event\", Details: ($ev.name + \" (\" + $ev.date + \")\") },\n          { Row: \"Cables cut\", Details: ($ev.cables | join(\", \")) },\n          { Row: \"Cause\", Details: $ev.cause },\n          { Row: \"Real impact (reported)\", Details: $ev.real_impact },\n          { Row: \"Model prediction (today's topology)\", Details: (if ($ev.model_predicted_isolated_countries | length) == 0 then \"No countries fully isolated\" else ($ev.model_predicted_isolated_countries | join(\", \")) + \" fully isolated\" end) },\n          { Row: \"Source\", Details: $ev.source }\n        ] + (if $ev.note then [{ Row: \"Note\", Details: $ev.note }] else [] end)\n    end\n  ) as $rows\n| $rows[]\n",
+                        "source": "url",
+                        "type": "json",
+                        "url": "https://raw.githubusercontent.com/nluecke/fork-the-internet/main/data/graph.json",
+                        "url_options": {
+                          "method": "GET"
+                        }
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": [
+                {
+                  "kind": "organize",
+                  "spec": {
+                    "id": "organize",
+                    "options": {
+                      "excludeByName": {},
+                      "includeByName": {},
+                      "indexByName": {
+                        "Details": 1,
+                        "Row": 0
+                      },
+                      "renameByName": {}
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "description": "Cuts the real cable set from a real historical incident against todays topology and compares the models predicted isolated countries to what was actually reported. Three real events: Red Sea (Feb 2024), West Africa (Mar 2024), Tonga (Jan 2022).",
+          "id": 10,
+          "links": [],
+          "title": "Show me the math: historical event validation",
+          "vizConfig": {
+            "group": "table",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              },
+              "options": {}
+            },
+            "version": ""
+          }
+        }
+      },
+      "panel-11": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "bfu1ozm3b87pcf"
+                      },
+                      "group": "yesoreyeram-infinity-datasource",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "columns": [],
+                        "format": "table",
+                        "parser": "jq-backend",
+                        "root_selector": "\"${cut_cable}\" as $cutval\n| . as $graph\n| ($graph.reroute_pressure[$cutval] // []) as $entries\n| if $cutval == \"\" then\n    [{ Edge: \"(no cut)\", Baseline_Load: null, New_Load: null, Pressure: \"\" }]\n  elif ($entries | length) == 0 then\n    [{ Edge: \"(none)\", Baseline_Load: null, New_Load: null, Pressure: \"This cut has no baseline shortest paths to reroute, or every affected pair became fully unreachable instead.\" }]\n  else\n    [ $entries[]\n      | . as $e\n      | ($graph.edges[$e.edge]) as $edge\n      | {\n          Edge: (if $edge.type == \"submarine\" then\n                   ($graph.cables[$edge.cable_id].name // $edge.cable_id) + \": \" + $graph.nodes[$edge.from].country + \" <-> \" + $graph.nodes[$edge.to].country\n                 else\n                   \"Terrestrial: \" + $edge.from + \" <-> \" + $edge.to\n                 end),\n          Baseline_Load: $e.baseline_load,\n          New_Load: $e.new_load,\n          Pressure: (if $e.ratio == null then \"new (previously unused)\" else (($e.ratio|tostring) + \"x\") end)\n        }\n    ]\n  end\n| .[]",
+                        "source": "url",
+                        "type": "json",
+                        "url": "https://raw.githubusercontent.com/nluecke/fork-the-internet/main/data/graph.json",
+                        "url_options": {
+                          "method": "GET"
+                        }
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": [
+                {
+                  "kind": "organize",
+                  "spec": {
+                    "id": "organize",
+                    "options": {
+                      "excludeByName": {},
+                      "includeByName": {},
+                      "indexByName": {
+                        "Baseline_Load": 1,
+                        "Edge": 0,
+                        "New_Load": 2,
+                        "Pressure": 3
+                      },
+                      "renameByName": {}
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "description": "Stage 3: for baseline pairs whose shortest path used $cut_cable, the surviving edges that pick up extra load after rerouting -- unitless and relative to the edge's normal baseline_pair_path_count share, capped to the top 8 by ratio. No fabricated capacity numbers.",
+          "id": 11,
+          "links": [],
+          "title": "Reroute pressure after cutting: $cut_cable",
+          "vizConfig": {
+            "group": "table",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              },
+              "options": {}
+            },
+            "version": ""
+          }
+        }
+      },
+      "panel-2": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "bfu1ozm3b87pcf"
+                      },
+                      "group": "yesoreyeram-infinity-datasource",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "columns": [],
+                        "format": "table",
+                        "parser": "jq-backend",
+                        "root_selector": "\"${cut_cable}\" as $cutval\n| . as $graph\n| if $cutval == \"\" then\n    { Cable: \"(no cut)\", Landing_Points: 0, Affected_Countries: \"\" }\n  else\n    ($graph.cables[$cutval]) as $cable\n    | ($cable.landing_point_ids // []) as $lps\n    | ([$lps[] as $lp | $graph.nodes[$lp].country] | unique | sort) as $countries\n    | { Cable: $cable.name, Landing_Points: ($lps | length), Affected_Countries: ($countries | join(\", \")) }\n  end",
+                        "source": "url",
+                        "type": "json",
+                        "url": "https://raw.githubusercontent.com/nluecke/fork-the-internet/main/data/graph.json",
+                        "url_options": {
+                          "method": "GET"
+                        }
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": [
+                {
+                  "kind": "organize",
+                  "spec": {
+                    "id": "organize",
+                    "options": {
+                      "excludeByName": {},
+                      "includeByName": {},
+                      "indexByName": {
+                        "Affected_Countries": 2,
+                        "Cable": 0,
+                        "Landing_Points": 1
+                      },
+                      "renameByName": {}
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "description": "Metadata for the currently selected cable, regardless of whether the cut isolates a country.",
+          "id": 2,
+          "links": [],
+          "title": "Cable info: $cut_cable",
+          "vizConfig": {
+            "group": "table",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              },
+              "options": {}
+            },
+            "version": ""
+          }
+        }
+      },
+      "panel-3": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "bfu1ozm3b87pcf"
+                      },
+                      "group": "yesoreyeram-infinity-datasource",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "columns": [],
+                        "format": "table",
+                        "parser": "jq-backend",
+                        "root_selector": "\"${cut_cable}\" as $cutval\n| . as $graph\n| ($graph.isolated_countries // []) as $baseline_isolated\n| ($graph.cables[$cutval].edge_indices // [] | map({(tostring): true}) | add // {}) as $cutset\n| [$graph.edges | to_entries[] | select(($cutset[(.key|tostring)] // false) | not) | .value] as $alive_edges\n| (reduce $alive_edges[] as $e ({}; .[$e.from] += [$e.to] | .[$e.to] += [$e.from])) as $adj\n| ([$graph.nodes | to_entries[]\n     | select(.value.type==\"country_hub\")\n     | select((.value.country) as $c | ($baseline_isolated | index($c)) == null)\n   ][0].key) as $seed\n| ( {visited: {($seed): true}, frontier: [$seed]}\n    | until(.frontier == [];\n        (.frontier | map($adj[.] // []) | add // []) as $cands\n        | .visited as $v\n        | ([$cands[] | select(($v[.] // false) | not)] | unique) as $new\n        | .visited = ($v + ([$new[] | {(.): true}] | add // {}))\n        | .frontier = $new\n      )\n    | .visited\n  ) as $reached\n| { Isolated_Country_Count: ([$graph.nodes | to_entries[]\n    | select(.value.type==\"country_hub\")\n    | select(($reached[.key] // false) | not)\n    | select((.value.country) as $c | ($baseline_isolated | index($c)) == null)] | length) }",
+                        "source": "url",
+                        "type": "json",
+                        "url": "https://raw.githubusercontent.com/nluecke/fork-the-internet/main/data/graph.json",
+                        "url_options": {
+                          "method": "GET"
+                        }
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "description": "Number of countries that lose every path to the main component through this cable cut (baseline-isolated countries Azerbaijan/Kazakhstan/Tuvalu excluded).",
+          "id": 3,
+          "links": [],
+          "title": "Isolated countries after cutting: $cut_cable",
+          "vizConfig": {
+            "group": "stat",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      },
+                      {
+                        "color": "red",
+                        "value": 1
+                      }
+                    ]
+                  }
+                },
+                "overrides": []
+              },
+              "options": {
+                "colorMode": "value",
+                "graphMode": "none",
+                "justifyMode": "auto",
+                "orientation": "auto",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "textMode": "auto"
+              }
+            },
+            "version": ""
+          }
+        }
+      },
+      "panel-4": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "description": "",
+          "id": 4,
+          "links": [],
+          "title": "Live View",
+          "vizConfig": {
+            "group": "text",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              },
+              "options": {
+                "content": "**All normal.** No cable cut — the live network is running undisturbed.\n\nPick a scenario above under *Cut a cable* to see how an outage propagates. Analysis panels appear automatically as soon as something breaks.",
+                "mode": "markdown"
+              }
+            },
+            "version": ""
+          }
+        }
+      },
+      "panel-5": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "bfu1ozm3b87pcf"
+                      },
+                      "group": "yesoreyeram-infinity-datasource",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "columns": [],
+                        "format": "table",
+                        "parser": "jq-backend",
+                        "root_selector": "\"${cut_cable}\" as $cutval\n| . as $graph\n| ($graph.nodes | to_entries | map(select(.value.type==\"country_hub\")) | length) as $total_hubs\n| ($graph.isolated_countries // []) as $baseline_isolated\n| ($total_hubs - ($baseline_isolated | length)) as $baseline_reachable\n| (\n    if $cutval == \"\" then $baseline_reachable\n    else\n      ($graph.cables[$cutval].edge_indices // [] | map({(tostring): true}) | add // {}) as $cutset\n      | [$graph.edges | to_entries[] | select(($cutset[(.key|tostring)] // false) | not) | .value] as $alive_edges\n      | (reduce $alive_edges[] as $e ({}; .[$e.from] += [$e.to] | .[$e.to] += [$e.from])) as $adj\n      | ([$graph.nodes | to_entries[]\n           | select(.value.type==\"country_hub\")\n           | select((.value.country) as $c | ($baseline_isolated | index($c)) == null)\n         ][0].key) as $seed\n      | ( {visited: {($seed): true}, frontier: [$seed]}\n          | until(.frontier == [];\n              (.frontier | map($adj[.] // []) | add // []) as $cands\n              | .visited as $v\n              | ([$cands[] | select(($v[.] // false) | not)] | unique) as $new\n              | .visited = ($v + ([$new[] | {(.): true}] | add // {}))\n              | .frontier = $new\n            )\n          | .visited\n        ) as $reached\n      | [$graph.nodes | to_entries[]\n           | select(.value.type==\"country_hub\")\n           | select((.value.country) as $c | ($baseline_isolated | index($c)) == null)\n           | select($reached[.key] // false)\n        ] | length\n    end\n  ) as $after_reachable\n| [\n    { State: \"Baseline (main)\", Reachable_Hubs: $baseline_reachable },\n    { State: (if $cutval == \"\" then \"After cut (none)\" else \"After cutting: \" + $cutval end), Reachable_Hubs: $after_reachable }\n  ] | .[]",
+                        "source": "url",
+                        "type": "json",
+                        "url": "https://raw.githubusercontent.com/nluecke/fork-the-internet/main/data/graph.json",
+                        "url_options": {
+                          "method": "GET"
+                        }
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": [
+                {
+                  "kind": "organize",
+                  "spec": {
+                    "id": "organize",
+                    "options": {
+                      "excludeByName": {},
+                      "includeByName": {},
+                      "indexByName": {
+                        "Reachable_Hubs": 1,
+                        "State": 0
+                      },
+                      "renameByName": {}
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "description": "Number of reachable country hubs (excluding baseline-isolated Azerbaijan/Kazakhstan/Tuvalu) before and after the selected cable cut, side by side.",
+          "id": 5,
+          "links": [],
+          "title": "Diff: reachability before/after cut",
+          "vizConfig": {
+            "group": "table",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              },
+              "options": {}
+            },
+            "version": ""
+          }
+        }
+      },
+      "panel-6": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "bfu1ozm3b87pcf"
+                      },
+                      "group": "yesoreyeram-infinity-datasource",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "columns": [],
+                        "format": "table",
+                        "parser": "jq-backend",
+                        "root_selector": "\"${cut_cable}\" as $cutval\n| . as $graph\n| ($graph.cables[$cutval].edge_indices // [] | map({(tostring): true}) | add // {}) as $cutset\n| ($graph.reroute_pressure[$cutval] // [] | map({(.edge|tostring): (.ratio // -1)}) | add // {}) as $pressure\n| $graph.edges | to_entries[]\n| select(.value.type == \"submarine\")\n| {\n    From_Lon: $graph.nodes[.value.from].lon,\n    From_Lat: $graph.nodes[.value.from].lat,\n    To_Lon: $graph.nodes[.value.to].lon,\n    To_Lat: $graph.nodes[.value.to].lat,\n    Cut: ($cutset[(.key|tostring)] // false),\n    Pressure: ($pressure[(.key|tostring)] // null)\n  }",
+                        "source": "url",
+                        "type": "json",
+                        "url": "https://raw.githubusercontent.com/nluecke/fork-the-internet/main/data/graph.json",
+                        "url_options": {
+                          "method": "GET"
+                        }
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "description": "All 2307 submarine cable edges (great-circle endpoints) rendered as arcs on the globe. The selected cable ($cut_cable) is highlighted in red with a flow effect; surviving edges that pick up rerouted load (Stage 3) are highlighted orange/yellow, scaled by pressure severity.",
+          "id": 6,
+          "links": [],
+          "title": "Globe: cable network",
+          "vizConfig": {
+            "group": "volkovlabs-echarts-panel",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              },
+              "options": {
+                "editor": {
+                  "format": "auto",
+                  "height": 600
+                },
+                "editorMode": "code",
+                "getOption": "const series = context.panel.data.series[0];\nconst fields = {};\n(series ? series.fields : []).forEach((f) => {\n  fields[f.name] = f.values && f.values.toArray ? f.values.toArray() : (f.values || []);\n});\nconst n = (fields.From_Lon || []).length;\nconst normal = [];\nconst cut = [];\nconst highPressure = [];\nconst modPressure = [];\nconst newRoute = [];\nfor (let i = 0; i < n; i++) {\n  const item = { coords: [[fields.From_Lon[i], fields.From_Lat[i]], [fields.To_Lon[i], fields.To_Lat[i]]] };\n  const p = fields.Pressure ? fields.Pressure[i] : null;\n  if (fields.Cut[i]) {\n    cut.push(item);\n  } else if (p === null || p === undefined) {\n    normal.push(item);\n  } else if (p === -1) {\n    newRoute.push(item);\n  } else if (p >= 3) {\n    highPressure.push(item);\n  } else {\n    modPressure.push(item);\n  }\n}\n\nconst option = {\n  backgroundColor: 'transparent',\n  globe: {\n    baseTexture: 'https://raw.githubusercontent.com/nluecke/fork-the-internet/main/assets/world.topo.bathy.200401.jpg',\n    heightTexture: 'https://raw.githubusercontent.com/nluecke/fork-the-internet/main/assets/world.topo.bathy.200401.jpg',\n    shading: 'lambert',\n    light: { ambient: { intensity: 0.4 }, main: { intensity: 1.2 } }\n  },\n  series: [\n    {\n      name: 'Network',\n      type: 'lines3D',\n      coordinateSystem: 'globe',\n      blendMode: 'lighter',\n      lineStyle: { width: 0.6, color: '#59c4ff', opacity: 0.25 },\n      data: normal\n    },\n    {\n      name: 'Reroute pressure (moderate, 1-3x)',\n      type: 'lines3D',\n      coordinateSystem: 'globe',\n      blendMode: 'lighter',\n      lineStyle: { width: 2.2, color: '#ffcc66', opacity: 0.85 },\n      data: modPressure\n    },\n    {\n      name: 'Reroute pressure (high, 3x+)',\n      type: 'lines3D',\n      coordinateSystem: 'globe',\n      blendMode: 'lighter',\n      lineStyle: { width: 4, color: '#ff8800', opacity: 0.9 },\n      data: highPressure\n    },\n    {\n      name: 'New route (previously unused)',\n      type: 'lines3D',\n      coordinateSystem: 'globe',\n      blendMode: 'lighter',\n      lineStyle: { width: 2.6, color: '#ffe27a', opacity: 0.9 },\n      data: newRoute\n    },\n    {\n      name: 'Cut',\n      type: 'lines3D',\n      coordinateSystem: 'globe',\n      blendMode: 'lighter',\n      lineStyle: { width: 4, color: '#ff3333', opacity: 1 },\n      effect: { show: true, trailWidth: 3, trailLength: 0.3, trailOpacity: 1, constantSpeed: 5 },\n      data: cut\n    }\n  ]\n};\n\nreturn { version: 2, option: option, notMerge: false };",
+                "map": "none",
+                "renderer": "canvas"
+              }
+            },
+            "version": "7.2.5"
+          }
+        }
+      },
+      "panel-7": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "bfu1ozm3b87pcf"
+                      },
+                      "group": "yesoreyeram-infinity-datasource",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "columns": [],
+                        "format": "table",
+                        "parser": "jq-backend",
+                        "root_selector": "\"${from_country}\" as $from\n| \"${to_country}\" as $to\n| \"${cut_cable}\" as $cutval\n| . as $graph\n| (\n    if $from == \"\" or $to == \"\" then\n      [{ State: \"Pick two countries\", Latency_ms: null, Note: \"Choose From and To above.\" }]\n    elif $from == $to then\n      [{ State: \"Same country\", Latency_ms: 0, Note: \"\" }]\n    else\n      ([$from, $to] | sort | join(\"|\")) as $key\n      | ($graph.latency_baseline[$key]) as $entry\n      | if $entry == null then\n          [{ State: \"No path\", Latency_ms: null, Note: \"One or both endpoints are isolated from the main network at baseline.\" }]\n        else\n          $entry[0] as $baseline_ms\n          | $entry[1] as $cable_idxs\n          | ($graph.latency_cable_index | index($cutval)) as $cut_idx\n          | (($cutval != \"\") and ($cut_idx != null) and (($cable_idxs | index($cut_idx)) != null)) as $affected\n          | [\n              { State: \"Baseline (main)\", Latency_ms: $baseline_ms, Note: \"\" }\n            ] + (\n              if $cutval == \"\" then []\n              elif $affected then\n                [{ State: (\"After cutting: \" + $cutval), Latency_ms: null, Note: \"This cable carries part of the baseline shortest path -- a reroute exists, but its exact latency is not modeled live.\" }]\n              else\n                [{ State: (\"After cutting: \" + $cutval), Latency_ms: $baseline_ms, Note: \"Unaffected: this cable is not on the shortest baseline path between these two countries.\" }]\n              end\n            )\n        end\n    end\n  ) as $rows\n| $rows[]",
+                        "source": "url",
+                        "type": "json",
+                        "url": "https://raw.githubusercontent.com/nluecke/fork-the-internet/main/data/graph.json",
+                        "url_options": {
+                          "method": "GET"
+                        }
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": [
+                {
+                  "kind": "organize",
+                  "spec": {
+                    "id": "organize",
+                    "options": {
+                      "excludeByName": {},
+                      "includeByName": {},
+                      "indexByName": {
+                        "Latency_ms": 1,
+                        "Note": 2,
+                        "State": 0
+                      },
+                      "renameByName": {}
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "description": "Precomputed shortest-path latency (Stage 2) between $from_country and $to_country. If the cut cable actually carries part of the baseline path, the exact rerouted latency is not modeled live (build-time precomputation only covers the uncut baseline) -- shown honestly rather than guessed.",
+          "id": 7,
+          "links": [],
+          "title": "Latency: $from_country <-> $to_country",
+          "vizConfig": {
+            "group": "table",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              },
+              "options": {}
+            },
+            "version": ""
+          }
+        }
+      },
+      "panel-8": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "bfu1ozm3b87pcf"
+                      },
+                      "group": "yesoreyeram-infinity-datasource",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "columns": [],
+                        "format": "table",
+                        "parser": "jq-backend",
+                        "root_selector": ".atlas_validation\n| sort_by(-.ratio)\n| .[]\n| { Countries: (.country_a + \" <-> \" + .country_b), Modelled_ms: .modelled_latency_ms, Measured_ms: .measured_rtt_ms, Ratio: .ratio }",
+                        "source": "url",
+                        "type": "json",
+                        "url": "https://raw.githubusercontent.com/nluecke/fork-the-internet/main/data/graph.json",
+                        "url_options": {
+                          "method": "GET"
+                        }
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": [
+                {
+                  "kind": "organize",
+                  "spec": {
+                    "id": "organize",
+                    "options": {
+                      "excludeByName": {},
+                      "includeByName": {},
+                      "indexByName": {
+                        "Countries": 0,
+                        "Measured_ms": 2,
+                        "Modelled_ms": 1,
+                        "Ratio": 3
+                      },
+                      "renameByName": {}
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "description": "Real measured RTT (RIPE Atlas anchor mesh, live network measurement) against the modelled physics-only latency_baseline, for 17 curated country pairs across 16 countries with an active RIPE Atlas anchor. Measured is always higher than modelled -- the model is an honest lower bound, not a claimed prediction (real routing is never a straight fiber line).",
+          "id": 8,
+          "links": [],
+          "title": "Show me the math: modelled vs. measured (RIPE Atlas)",
+          "vizConfig": {
+            "group": "table",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              },
+              "options": {}
+            },
+            "version": ""
+          }
+        }
+      },
+      "panel-9": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "bfu1ozm3b87pcf"
+                      },
+                      "group": "yesoreyeram-infinity-datasource",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "columns": [],
+                        "format": "table",
+                        "parser": "jq-backend",
+                        "root_selector": "[.atlas_validation[].ratio] | sort as $s | ($s|length) as $n\n| { Median_Ratio: (if $n % 2 == 1 then $s[($n-1)/2] else (($s[$n/2 - 1] + $s[$n/2]) / 2 | . * 100 | round / 100) end), Pairs_Checked: $n }",
+                        "source": "url",
+                        "type": "json",
+                        "url": "https://raw.githubusercontent.com/nluecke/fork-the-internet/main/data/graph.json",
+                        "url_options": {
+                          "method": "GET"
+                        }
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "description": "Median of measured/modelled ratio across all checked RIPE Atlas pairs -- how much real-world routing typically adds on top of the physics-only lower bound.",
+          "id": 9,
+          "links": [],
+          "title": "Median real-world overhead",
+          "vizConfig": {
+            "group": "table",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              },
+              "options": {}
+            },
+            "version": ""
+          }
+        }
+      }
+    },
+    "layout": {
+      "kind": "RowsLayout",
+      "spec": {
+        "rows": [
+          {
+            "kind": "RowsLayoutRow",
+            "spec": {
+              "collapse": false,
+              "layout": {
+                "kind": "GridLayout",
+                "spec": {
+                  "items": [
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-2"
+                        },
+                        "height": 6,
+                        "width": 12,
+                        "x": 0,
+                        "y": 0
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-3"
+                        },
+                        "height": 6,
+                        "width": 12,
+                        "x": 12,
+                        "y": 0
+                      }
+                    }
+                  ]
+                }
+              },
+              "title": "Cable Context"
+            }
+          },
+          {
+            "kind": "RowsLayoutRow",
+            "spec": {
+              "collapse": false,
+              "layout": {
+                "kind": "GridLayout",
+                "spec": {
+                  "items": [
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-7"
+                        },
+                        "height": 8,
+                        "width": 24,
+                        "x": 0,
+                        "y": 0
+                      }
+                    }
+                  ]
+                }
+              },
+              "title": "Latency"
+            }
+          },
+          {
+            "kind": "RowsLayoutRow",
+            "spec": {
+              "collapse": false,
+              "layout": {
+                "kind": "GridLayout",
+                "spec": {
+                  "items": [
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-8"
+                        },
+                        "height": 10,
+                        "width": 18,
+                        "x": 0,
+                        "y": 0
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-9"
+                        },
+                        "height": 10,
+                        "width": 6,
+                        "x": 18,
+                        "y": 0
+                      }
+                    }
+                  ]
+                }
+              },
+              "title": "Validation (RIPE Atlas)"
+            }
+          },
+          {
+            "kind": "RowsLayoutRow",
+            "spec": {
+              "collapse": false,
+              "layout": {
+                "kind": "GridLayout",
+                "spec": {
+                  "items": [
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-10"
+                        },
+                        "height": 10,
+                        "width": 24,
+                        "x": 0,
+                        "y": 0
+                      }
+                    }
+                  ]
+                }
+              },
+              "title": "Historical Validation"
+            }
+          },
+          {
+            "kind": "RowsLayoutRow",
+            "spec": {
+              "collapse": false,
+              "layout": {
+                "kind": "GridLayout",
+                "spec": {
+                  "items": [
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-6"
+                        },
+                        "height": 14,
+                        "width": 24,
+                        "x": 0,
+                        "y": 0
+                      }
+                    }
+                  ]
+                }
+              },
+              "title": "Globe"
+            }
+          },
+          {
+            "kind": "RowsLayoutRow",
+            "spec": {
+              "collapse": false,
+              "conditionalRendering": {
+                "kind": "ConditionalRenderingGroup",
+                "spec": {
+                  "condition": "and",
+                  "items": [
+                    {
+                      "kind": "ConditionalRenderingVariable",
+                      "spec": {
+                        "operator": "notEquals",
+                        "value": "",
+                        "variable": "cut_cable"
+                      }
+                    }
+                  ],
+                  "visibility": "show"
+                }
+              },
+              "layout": {
+                "kind": "GridLayout",
+                "spec": {
+                  "items": [
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-1"
+                        },
+                        "height": 12,
+                        "width": 12,
+                        "x": 0,
+                        "y": 0
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-5"
+                        },
+                        "height": 12,
+                        "width": 12,
+                        "x": 12,
+                        "y": 0
+                      }
+                    }
+                  ]
+                }
+              },
+              "title": "Impact: Total Outage"
+            }
+          },
+          {
+            "kind": "RowsLayoutRow",
+            "spec": {
+              "collapse": false,
+              "conditionalRendering": {
+                "kind": "ConditionalRenderingGroup",
+                "spec": {
+                  "condition": "and",
+                  "items": [
+                    {
+                      "kind": "ConditionalRenderingVariable",
+                      "spec": {
+                        "operator": "notEquals",
+                        "value": "",
+                        "variable": "cut_cable"
+                      }
+                    }
+                  ],
+                  "visibility": "show"
+                }
+              },
+              "layout": {
+                "kind": "GridLayout",
+                "spec": {
+                  "items": [
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-11"
+                        },
+                        "height": 10,
+                        "width": 24,
+                        "x": 0,
+                        "y": 0
+                      }
+                    }
+                  ]
+                }
+              },
+              "title": "Reroute Pressure"
+            }
+          },
+          {
+            "kind": "RowsLayoutRow",
+            "spec": {
+              "collapse": false,
+              "conditionalRendering": {
+                "kind": "ConditionalRenderingGroup",
+                "spec": {
+                  "condition": "and",
+                  "items": [
+                    {
+                      "kind": "ConditionalRenderingVariable",
+                      "spec": {
+                        "operator": "equals",
+                        "value": "",
+                        "variable": "cut_cable"
+                      }
+                    }
+                  ],
+                  "visibility": "show"
+                }
+              },
+              "layout": {
+                "kind": "GridLayout",
+                "spec": {
+                  "items": [
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-4"
+                        },
+                        "height": 4,
+                        "width": 24,
+                        "x": 0,
+                        "y": 0
+                      }
+                    }
+                  ]
+                }
+              },
+              "title": "Live View"
+            }
+          }
+        ]
+      }
+    },
+    "links": [],
+    "liveNow": false,
+    "preload": false,
+    "tags": [
+      "golden-grot-2027",
+      "stage1"
+    ],
+    "timeSettings": {
+      "autoRefresh": "",
+      "autoRefreshIntervals": [
+        "5s",
+        "10s",
+        "30s",
+        "1m",
+        "5m",
+        "15m",
+        "30m",
+        "1h",
+        "2h",
+        "1d"
+      ],
+      "fiscalYearStartMonth": 0,
+      "from": "now-1h",
+      "hideTimepicker": false,
+      "timezone": "utc",
+      "to": "now"
+    },
+    "title": "Fork the Internet — Stage 1: Reachability",
+    "variables": [
+      {
+        "kind": "QueryVariable",
+        "spec": {
+          "allowCustomValue": true,
+          "current": {
+            "text": "(no cut)",
+            "value": ""
+          },
+          "hide": "dontHide",
+          "includeAll": false,
+          "label": "Cut a cable",
+          "multi": false,
+          "name": "cut_cable",
+          "options": [],
+          "query": {
+            "datasource": {
+              "name": "bfu1ozm3b87pcf"
+            },
+            "group": "yesoreyeram-infinity-datasource",
+            "kind": "DataQuery",
+            "spec": {
+              "infinityQuery": {
+                "columns": [],
+                "filters": [],
+                "format": "table",
+                "parser": "jq-backend",
+                "refId": "variable",
+                "root_selector": "({text: \"(no cut)\", value: \"\"}), (.cables | to_entries[] | {text: .value.name, value: .key})",
+                "source": "url",
+                "type": "json",
+                "url": "https://raw.githubusercontent.com/nluecke/fork-the-internet/main/data/graph.json",
+                "url_options": {
+                  "data": "",
+                  "method": "GET"
+                }
+              },
+              "query": "",
+              "queryType": "infinity"
+            },
+            "version": "v0"
+          },
+          "refresh": "onDashboardLoad",
+          "regex": "",
+          "skipUrlSync": false,
+          "sort": "alphabeticalAsc"
+        }
+      },
+      {
+        "kind": "QueryVariable",
+        "spec": {
+          "allowCustomValue": true,
+          "current": {
+            "text": "Japan",
+            "value": "hub__japan"
+          },
+          "hide": "dontHide",
+          "includeAll": false,
+          "label": "From",
+          "multi": false,
+          "name": "from_country",
+          "options": [],
+          "query": {
+            "datasource": {
+              "name": "bfu1ozm3b87pcf"
+            },
+            "group": "yesoreyeram-infinity-datasource",
+            "kind": "DataQuery",
+            "spec": {
+              "infinityQuery": {
+                "columns": [],
+                "filters": [],
+                "format": "table",
+                "parser": "jq-backend",
+                "refId": "variable",
+                "root_selector": ".nodes | to_entries[]\n| select(.value.type == \"country_hub\")\n| (.key | split(\"__\")) as $parts\n| { text: (if ($parts|length) == 3 then \"\\(.value.country) - landmass \\(($parts[2]|tonumber) + 1)\" else .value.country end), value: .key }",
+                "source": "url",
+                "type": "json",
+                "url": "https://raw.githubusercontent.com/nluecke/fork-the-internet/main/data/graph.json",
+                "url_options": {
+                  "data": "",
+                  "method": "GET"
+                }
+              },
+              "query": "",
+              "queryType": "infinity"
+            },
+            "version": "v0"
+          },
+          "refresh": "onDashboardLoad",
+          "regex": "",
+          "skipUrlSync": false,
+          "sort": "alphabeticalAsc"
+        }
+      },
+      {
+        "kind": "QueryVariable",
+        "spec": {
+          "allowCustomValue": true,
+          "current": {
+            "text": "United States - landmass 1",
+            "value": "hub__united-states__0"
+          },
+          "hide": "dontHide",
+          "includeAll": false,
+          "label": "To",
+          "multi": false,
+          "name": "to_country",
+          "options": [],
+          "query": {
+            "datasource": {
+              "name": "bfu1ozm3b87pcf"
+            },
+            "group": "yesoreyeram-infinity-datasource",
+            "kind": "DataQuery",
+            "spec": {
+              "infinityQuery": {
+                "columns": [],
+                "filters": [],
+                "format": "table",
+                "parser": "jq-backend",
+                "refId": "variable",
+                "root_selector": ".nodes | to_entries[]\n| select(.value.type == \"country_hub\")\n| (.key | split(\"__\")) as $p\n| { text: (if ($p|length) == 3 then \"\\(.value.country) - landmass \\(($p[2]|tonumber) + 1)\" else .value.country end), value: .key }",
+                "source": "url",
+                "type": "json",
+                "url": "https://raw.githubusercontent.com/nluecke/fork-the-internet/main/data/graph.json",
+                "url_options": {
+                  "data": "",
+                  "method": "GET"
+                }
+              },
+              "query": "",
+              "queryType": "infinity"
+            },
+            "version": "v0"
+          },
+          "refresh": "onDashboardLoad",
+          "regex": "",
+          "skipUrlSync": false,
+          "sort": "alphabeticalAsc"
+        }
+      },
+      {
+        "kind": "QueryVariable",
+        "spec": {
+          "allowCustomValue": true,
+          "current": {
+            "text": "West Africa cable cuts (2024-03-14)",
+            "value": "west-africa-2024"
+          },
+          "hide": "dontHide",
+          "includeAll": false,
+          "label": "Historical event",
+          "multi": false,
+          "name": "historical_event",
+          "options": [],
+          "query": {
+            "datasource": {
+              "name": "bfu1ozm3b87pcf"
+            },
+            "group": "yesoreyeram-infinity-datasource",
+            "kind": "DataQuery",
+            "spec": {
+              "infinityQuery": {
+                "columns": [],
+                "filters": [],
+                "format": "table",
+                "parser": "jq-backend",
+                "refId": "variable",
+                "root_selector": "({text: \"(pick an event)\", value: \"\"}), (.historical_events[] | {text: (.name + \" (\" + .date + \")\"), value: .id})",
+                "source": "url",
+                "type": "json",
+                "url": "https://raw.githubusercontent.com/nluecke/fork-the-internet/main/data/graph.json",
+                "url_options": {
+                  "data": "",
+                  "method": "GET"
+                }
+              },
+              "query": "",
+              "queryType": "infinity"
+            },
+            "version": "v0"
+          },
+          "refresh": "onDashboardLoad",
+          "regex": "",
+          "skipUrlSync": false,
+          "sort": "alphabeticalAsc"
+        }
+      }
+    ]
+  }
+}
