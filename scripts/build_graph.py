@@ -631,7 +631,7 @@ def build_terrestrial_edges(final_groups):
 # Baseline betweenness + unreachable pairs (003, Point 5)
 # --------------------------------------------------------------------------
 
-def dijkstra(adj, src):
+def dijkstra(adj, src, excluded_edges=None):
     dist = {src: 0.0}
     prev = {}
     pq = [(0.0, src)]
@@ -642,6 +642,8 @@ def dijkstra(adj, src):
             continue
         visited.add(u)
         for v, w, edge_key in adj[u]:
+            if excluded_edges and edge_key in excluded_edges:
+                continue
             nd = d + w
             if v not in dist or nd < dist[v]:
                 dist[v] = nd
@@ -677,11 +679,19 @@ def connected_components(nodes_adj):
     return {n: find(n) for n in parent}
 
 
-def compute_baseline_and_unreachable(nodes_adj, hubs_by_country):
+def compute_baseline_and_unreachable(nodes_adj, hubs_by_country, edges):
     """Runs one Dijkstra per hub, derives country-pair reachability (min over hub
     combinations) and increments baseline_pair_path_count per edge on each country
     pair's shortest path. Also counts unreachable country pairs and countries
     isolated from the largest connected component (003, Point 5).
+
+    Also returns `pair_records`: one entry per reachable country pair with its
+    selected hub pair, full edge path and the set of cables that path touches --
+    the exact same pair set baseline_pair_path_count is built from. Stage 3 reroute
+    pressure (compute_reroute_pressure) needs this to stay consistent with the
+    edge load figures it reports deltas against; recomputing "affected pairs" from
+    a different pair set (e.g. the finer all-hub-pairs set behind latency_baseline)
+    would report deltas against a baseline that isn't the one being displayed.
     """
     countries = sorted(hubs_by_country.keys())
     all_hubs = [h for hids in hubs_by_country.values() for h in hids]
@@ -694,6 +704,7 @@ def compute_baseline_and_unreachable(nodes_adj, hubs_by_country):
     baseline_count = collections.Counter()
     unreachable = 0
     total_pairs = 0
+    pair_records = []
 
     for i in range(len(countries)):
         for j in range(i + 1, len(countries)):
@@ -712,10 +723,17 @@ def compute_baseline_and_unreachable(nodes_adj, hubs_by_country):
             # walk back the path from hb to ha using prev_from[ha]
             node = hb
             prev = prev_from[ha]
+            edge_path = []
+            cables = set()
             while node in prev:
                 parent, edge_key = prev[node]
                 baseline_count[edge_key] += 1
+                edge_path.append(edge_key)
+                cid = edges[edge_key].get("cable_id")
+                if cid is not None:
+                    cables.add(cid)
                 node = parent
+            pair_records.append({"ha": ha, "hb": hb, "edge_path": edge_path, "cables": cables})
 
     # "Isolated" means no hub of that country sits in the graph's largest connected
     # component -- not merely "unreachable from every other country". A country pair
@@ -732,7 +750,88 @@ def compute_baseline_and_unreachable(nodes_adj, hubs_by_country):
         if not any(comp_of.get(h) == largest_component for h in hubs_by_country[c])
     ]
 
-    return baseline_count, unreachable, total_pairs, isolated_countries
+    return baseline_count, unreachable, total_pairs, isolated_countries, pair_records
+
+
+# --------------------------------------------------------------------------
+# Stage 3 reroute pressure (unitless, relative -- no fabricated capacity numbers)
+# --------------------------------------------------------------------------
+
+REROUTE_PRESSURE_TOP_K = 8
+
+
+def compute_reroute_pressure(nodes_adj, cables, baseline_count, pair_records, log=print):
+    """For every cable, among the country pairs whose baseline shortest path used
+    it (pair_records, the exact pair set baseline_pair_path_count is built from --
+    see compute_baseline_and_unreachable's docstring), reroutes those pairs around
+    the cable and tallies which surviving edges pick up extra load relative to
+    their normal baseline_pair_path_count share.
+
+    Deliberately unitless (Principle: no fabricated congestion percentages --
+    info_traffic in PeeringDB is a network's volume, not a cable's capacity).
+    Reported as "this edge now carries N.NNx its normal path share" -- physically
+    grounded in the same betweenness count already shown elsewhere on the
+    dashboard, not a capacity claim.
+
+    Only edges whose load increases are kept (unaffected/decreased edges aren't
+    "pressure"), capped to the top REROUTE_PRESSURE_TOP_K per cable by ratio to
+    bound artifact size. A cable with zero affected pairs (never on any baseline
+    shortest path -- redundant by construction) is omitted from the result
+    entirely; the dashboard treats a missing key as "no reroute pressure from
+    this cut", which is the correct reading.
+    """
+    affected_by_cable = collections.defaultdict(list)
+    for rec in pair_records:
+        for cid in rec["cables"]:
+            affected_by_cable[cid].append(rec)
+
+    result = {}
+    for cable_id, recs in affected_by_cable.items():
+        cut_edges = set(cables[cable_id]["edge_indices"])
+
+        before_counter = collections.Counter()
+        for rec in recs:
+            for edge_key in rec["edge_path"]:
+                before_counter[edge_key] += 1
+
+        pairs_by_src = collections.defaultdict(set)
+        for rec in recs:
+            pairs_by_src[rec["ha"]].add(rec["hb"])
+
+        after_counter = collections.Counter()
+        for src, dsts in pairs_by_src.items():
+            dist2, prev2 = dijkstra(nodes_adj, src, excluded_edges=cut_edges)
+            for dst in dsts:
+                if dst not in dist2:
+                    continue  # now unreachable -- Stage 1 territory, contributes no load elsewhere
+                node = dst
+                while node in prev2:
+                    parent, edge_key = prev2[node]
+                    after_counter[edge_key] += 1
+                    node = parent
+
+        entries = []
+        for edge_key in set(before_counter) | set(after_counter):
+            if edge_key in cut_edges:
+                continue
+            baseline_load = baseline_count.get(edge_key, 0)
+            unaffected_load = baseline_load - before_counter.get(edge_key, 0)
+            new_load = unaffected_load + after_counter.get(edge_key, 0)
+            if new_load <= baseline_load:
+                continue
+            ratio = round(new_load / baseline_load, 2) if baseline_load > 0 else None
+            entries.append({
+                "edge": edge_key, "baseline_load": baseline_load,
+                "new_load": new_load, "ratio": ratio,
+            })
+
+        if not entries:
+            continue
+        entries.sort(key=lambda e: (e["ratio"] is None, -(e["ratio"] or 0), -e["new_load"]))
+        result[cable_id] = entries[:REROUTE_PRESSURE_TOP_K]
+
+    log(f"  reroute pressure computed for {len(result)}/{len(cables)} cables with affected baseline pairs")
+    return result
 
 
 # --------------------------------------------------------------------------
@@ -1122,7 +1221,7 @@ def build_artifact(log=print):
     hubs_by_country = collections.defaultdict(list)
     for h in hubs:
         hubs_by_country[h["country"]].append(h["id"])
-    baseline_count, unreachable_pairs, total_pairs, isolated_countries = compute_baseline_and_unreachable(nodes_adj, hubs_by_country)
+    baseline_count, unreachable_pairs, total_pairs, isolated_countries, pair_records = compute_baseline_and_unreachable(nodes_adj, hubs_by_country, edges)
     for idx, e in enumerate(edges):
         e["baseline_pair_path_count"] = baseline_count.get(idx, 0)
 
@@ -1132,6 +1231,9 @@ def build_artifact(log=print):
 
     log("fetching RIPE Atlas validation layer (curated country pairs)...")
     atlas_validation = build_atlas_validation(latency_baseline, nodes, log=log)
+
+    log("computing Stage 3 reroute pressure (per cable, top affected edges)...")
+    reroute_pressure = compute_reroute_pressure(nodes_adj, cables, baseline_count, pair_records, log=log)
 
     log("computing historical event validation (Stage 4)...")
     historical_events = build_historical_events(edges, cables, hubs_by_country, isolated_countries, log=log)
@@ -1176,6 +1278,7 @@ def build_artifact(log=print):
         "latency_baseline": latency_baseline,
         "atlas_validation": atlas_validation,
         "historical_events": historical_events,
+        "reroute_pressure": reroute_pressure,
     }
     return artifact
 
