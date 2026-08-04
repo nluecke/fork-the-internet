@@ -423,11 +423,15 @@ def match_and_chain_cable(cid, cable_detail, lines_by_cable, lp_coords):
             connected.add(lp2)
 
     # Tier 3: inferred -- no vertex/endpoint match at all. Chord to nearest covered LP.
+    # Tie-broken on the candidate id itself: `covered` is a set, whose iteration order
+    # is hash-randomized per process, so a bare min() over an exact distance tie would
+    # pick a different (still equally valid) landing point on every rebuild -- a real,
+    # measured source of the edge-id non-determinism from Step 6 (Principle 3).
     for lpid in still_uncovered:
         if not covered:
             continue
         lpc = lp_coords[lpid]
-        best = min(covered, key=lambda o: gc_dist(lpc, lp_coords[o]))
+        best = min(covered, key=lambda o: (gc_dist(lpc, lp_coords[o]), o))
         w = gc_dist(lpc, lp_coords[best])
         submarine_edges.append({
             "from": lpid, "to": best, "distance_km": round(w, 1),
@@ -445,7 +449,14 @@ def match_and_chain_cable(cid, cable_detail, lines_by_cable, lp_coords):
     # Tier 4: branch fallback -- matched (tier1/tier2) LPs with no pairing partner on
     # their own segment (e.g. a short spur off an undeclared branching unit). Chord to
     # nearest already-connected LP on the same cable (003, Point 3a).
-    orphans = [lpid for lpid in covered if lpid not in connected]
+    # Sorted, not a bare set comprehension: `covered` is a set, so the processing order
+    # below (which orphan attaches to which growing "connected" neighborhood first) was
+    # otherwise hash-randomized per process -- the dominant source of the edge-id
+    # non-determinism from Step 6. Same physical connectivity either way, but a
+    # different processing order can genuinely pick a different nearest-connected
+    # partner for a given orphan (not just a from/to label swap), so this needs a
+    # deterministic order, not just a deterministic tie-break at the point of choice.
+    orphans = sorted(lpid for lpid in covered if lpid not in connected)
     if orphans and not connected:
         # Every declared landing point on this cable sits alone on its own segment --
         # a pure multi-branch topology with no segment ever shared by two of them.
@@ -469,7 +480,7 @@ def match_and_chain_cable(cid, cable_detail, lines_by_cable, lp_coords):
             remaining.append(lpid)
             continue
         lpc = lp_coords[lpid]
-        best = min(targets, key=lambda o: gc_dist(lpc, lp_coords[o]))
+        best = min(targets, key=lambda o: (gc_dist(lpc, lp_coords[o]), o))
         w = gc_dist(lpc, lp_coords[best])
         submarine_edges.append({
             "from": lpid, "to": best, "distance_km": round(w, 1),
